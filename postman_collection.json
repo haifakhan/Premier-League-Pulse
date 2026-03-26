@@ -1,0 +1,1352 @@
+{
+  "info": {
+    "_postman_id": "150e906e-27dc-42ec-b49a-97914096f3f7",
+    "name": "SportsDeck API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "53016114",
+    "_collection_link": "https://go.postman.co/collection/53016114-150e906e-27dc-42ec-b49a-97914096f3f7?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();\r",
+                  "if (res.token) {\r",
+                  "    pm.collectionVariables.set(\"adminToken\", res.token);\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"admin@test.com\",\"password\":\"admin123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"newuser@test.com\",\"password\":\"password123\",\"username\":\"newuser\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/auth/signup",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "auth",
+                "signup"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/auth/me",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login as User (no privileges)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();\r",
+                  "if (res.token) {\r",
+                  "    pm.collectionVariables.set(\"userToken\", res.token);\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"user3@test.com\",\"password\":\"password123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/auth/logout",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/cmmh6o8gw0000iqud2bvrzr4x",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "cmmh6o8gw0000iqud2bvrzr4x"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Edit My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"admin\",\"bio\":\"I love football\",\"favoriteTeamId\":\"57\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/users/me",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "User Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/cmmh6o8gw0000iqud2bvrzr4x/activity?from=2026-01-01&to=2026-03-08",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "cmmh6o8gw0000iqud2bvrzr4x",
+                "activity"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-01-01",
+                  "type": "text"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-03-08",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Follows",
+      "item": [
+        {
+          "name": "Follow User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/cmmgwmcob0000txud01ja54dl/follow",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "cmmgwmcob0000txud01ja54dl",
+                "follow"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unfollow User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/cmmgwmcob0000txud01ja54dl/follow",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "cmmgwmcob0000txud01ja54dl",
+                "follow"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My Following List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/me/following",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "me",
+                "following"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "My Followers List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/me/followers",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "me",
+                "followers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Followers",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/users/me/followers/cmmgwmcob0000txud01ja54dl",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "users",
+                "me",
+                "followers",
+                "cmmgwmcob0000txud01ja54dl"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Threads",
+      "item": [
+        {
+          "name": "List Threads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/threads?q=match",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "match"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Thread",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"Match Discussion\",\"content\":\"Excited for today!\",\"forumType\":\"GENERAL\",\"tags\":[\"football\",\"premier-league\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/threads",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Thread by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Edit Thread",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\": \"Updated Match Discussion\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Thread",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Posts",
+      "item": [
+        {
+          "name": "Create Post",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\":\"Great discussion everyone!\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9/posts",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9",
+                "posts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reply to Post",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\":\"I agree!\",\"parentPostId\":\"cmmi3ct2g0009buudi4o87kp2\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9/posts",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9",
+                "posts"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Edit Post",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"content\": \"Updated content here\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/posts/cmmi3ct2g0009buudi4o87kp2",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "posts",
+                "cmmi3ct2g0009buudi4o87kp2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Post",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/posts/cmmi3ct2g0009buudi4o87kp2",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "posts",
+                "cmmi3ct2g0009buudi4o87kp2"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Post Revisions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/posts/cmmi3ct2g0009buudi4o87kp2/revisions",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "posts",
+                "cmmi3ct2g0009buudi4o87kp2",
+                "revisions"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Sports",
+      "item": [
+        {
+          "name": "Get Teams",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/sports/teams",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "sports",
+                "teams"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Matches (Recent)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/sports/matches?status=RECENT",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "sports",
+                "matches"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "RECENT"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Matches (Upcoming)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/sports/matches?status=UPCOMING",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "sports",
+                "matches"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "UPCOMING"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Standings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/sports/standings",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "sports",
+                "standings"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Match by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/sports/matches/538067",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "sports",
+                "matches",
+                "538067"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Match Threads",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/sports/sync-match-threads",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "sports",
+                "sync-match-threads"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Feed",
+      "item": [
+        {
+          "name": "Get Feed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/feed",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "feed"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Create Report",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"targetType\":\"POST\",\"targetId\":\"cmmhed5jt0003snudzk95tynr\",\"reason\":\"This post is inappropriate\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/reports",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "reports"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Appeals",
+      "item": [
+        {
+          "name": "Submit Appeal",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"reason\":\"I did nothing wrong, please unban me\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/appeals",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "appeals"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get Reports Queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/reports",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "reports"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dismiss Report",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/reports/cmmhed8hb0004snudse9pu6yk/dismiss",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "reports",
+                "cmmhed8hb0004snudse9pu6yk",
+                "dismiss"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Report",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/reports/cmmi4jc0y0000mjudvnw4bxvo/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "reports",
+                "cmmi4jc0y0000mjudvnw4bxvo",
+                "approve"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Ban User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/users/cmmgwmcob0000txud01ja54dl/ban",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "cmmgwmcob0000txud01ja54dl",
+                "ban"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unban User",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/users/cmmgwmcob0000txud01ja54dl/unban",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "cmmgwmcob0000txud01ja54dl",
+                "unban"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Appeals Queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/appeals",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "appeals"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Appeal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/appeals/cmmi6kdai0003mjudblesnld9/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "appeals",
+                "cmmi6kdai0003mjudblesnld9",
+                "approve"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reject Appeal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/admin/appeals/cmmi6dars0002mjudchkjmjyx/reject",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "admin",
+                "appeals",
+                "cmmi6dars0002mjudchkjmjyx",
+                "reject"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Polls",
+      "item": [
+        {
+          "name": "Create Poll",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"question\": \"Who will win the match?\",\r\n  \"options\": [\"Arsenal\", \"Chelsea\", \"Draw\"],\r\n  \"deadline\": \"2026-12-31T23:59:59Z\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9/poll",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9",
+                "poll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Poll Results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9/poll",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9",
+                "poll"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Vote in Poll",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"optionId\": \"cmmi9cxdu000amjudrd7sw3m9\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/polls/cmmi9cxcv0009mjudfs8byf4u/vote",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "polls",
+                "cmmi9cxcv0009mjudfs8byf4u",
+                "vote"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Edit Poll",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"question\": \"Updated question?\", \"deadline\": \"2026-12-31T23:59:59Z\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/polls/cmmi9cxcv0009mjudfs8byf4u",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "polls",
+                "cmmi9cxcv0009mjudfs8byf4u"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Poll",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/polls/cmmi9cxcv0009mjudfs8byf4u",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "polls",
+                "cmmi9cxcv0009mjudfs8byf4u"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "Translate Post",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"text\": \"Bonjour, ce match était incroyable!\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/ai/translate",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "ai",
+                "translate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Thread Sentiment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/threads/cmmhci17000006zud0wv22ai9/sentiment",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "threads",
+                "cmmhci17000006zud0wv22ai9",
+                "sentiment"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Daily Digest",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/digest/daily",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "digest",
+                "daily"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{adminToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    }
+  ]
+}

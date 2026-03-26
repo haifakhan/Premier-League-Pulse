@@ -1,0 +1,284 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // url in prisma.config.ts
+}
+
+enum UserRole {
+  REGULAR
+  ADMIN
+}
+
+enum ThreadStatus {
+  OPEN
+  CLOSED
+}
+
+enum ForumType {
+  GENERAL
+  TEAM
+}
+
+enum PostKind {
+  ROOT
+  REPLY
+}
+
+enum AppealStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ReportStatus {
+  PENDING
+  DISMISSED
+  APPROVED
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  username       String   @unique
+  avatarUrl      String?
+  bio            String?
+  role           UserRole @default(REGULAR)
+  isBanned       Boolean  @default(false)
+  favoriteTeamId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  threads        Thread[]        @relation("ThreadAuthor")
+  posts          Post[]          @relation("PostAuthor")
+  postRevisions  PostRevision[]  @relation("PostRevisionEditor")
+  following      Follow[]        @relation("FollowFollower")
+  followers      Follow[]        @relation("FollowFollowing")
+  pollVotes      PollVote[]
+  reports        Report[]
+  appeals        Appeal[]        @relation("AppealUser")
+  reviewedAppeals Appeal[]       @relation("AppealReviewer")
+  hiddenThreads  Thread[]        @relation("ThreadHiddenBy")
+  hiddenPosts    Post[]          @relation("PostHiddenBy")
+  deletedThreads Thread[]        @relation("ThreadDeletedBy")
+  deletedPosts   Post[]          @relation("PostDeletedBy")
+  reviewedReports  Report[]      @relation("ReportReviewer")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("FollowFollower", fields: [followerId], references: [id])
+  following User @relation("FollowFollowing", fields: [followingId], references: [id])
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+model Thread {
+  id              String       @id @default(cuid())
+  authorId        String
+  title           String
+  status          ThreadStatus @default(OPEN)
+  forumType       ForumType
+  teamId          String?
+  matchId         String?      @unique
+  isHidden        Boolean      @default(false)
+  hiddenAt        DateTime?
+  hiddenByUserId  String?
+  isDeleted       Boolean      @default(false)
+  deletedAt       DateTime?
+  deletedByUserId String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  author        User    @relation("ThreadAuthor", fields: [authorId], references: [id])
+  hiddenByUser  User?   @relation("ThreadHiddenBy", fields: [hiddenByUserId], references: [id])
+  deletedByUser User?   @relation("ThreadDeletedBy", fields: [deletedByUserId], references: [id])
+  posts         Post[]
+  threadTags    ThreadTag[]
+  poll          Poll?
+  reports       Report[]
+
+  @@index([authorId])
+  @@index([forumType, teamId])
+  @@index([hiddenByUserId])
+  @@index([deletedByUserId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  threadTags ThreadTag[]
+}
+
+model ThreadTag {
+  threadId   String
+  tagId      String
+  assignedAt DateTime @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id])
+  tag    Tag    @relation(fields: [tagId], references: [id])
+
+  @@id([threadId, tagId])
+  @@index([tagId])
+}
+
+model Post {
+  id              String   @id @default(cuid())
+  threadId        String
+  authorId        String
+  parentPostId    String?
+  kind            PostKind
+  content         String
+  isHidden        Boolean  @default(false)
+  hiddenAt        DateTime?
+  hiddenByUserId  String?
+  isDeleted       Boolean  @default(false)
+  deletedAt       DateTime?
+  deletedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  thread        Thread         @relation(fields: [threadId], references: [id])
+  author        User           @relation("PostAuthor", fields: [authorId], references: [id])
+  parentPost    Post?          @relation("PostReplies", fields: [parentPostId], references: [id])
+  replies       Post[]         @relation("PostReplies")
+  hiddenByUser  User?          @relation("PostHiddenBy", fields: [hiddenByUserId], references: [id])
+  deletedByUser User?          @relation("PostDeletedBy", fields: [deletedByUserId], references: [id])
+  revisions     PostRevision[]
+  reports       Report[]
+
+  @@index([threadId])
+  @@index([authorId])
+  @@index([parentPostId])
+  @@index([kind])
+  @@index([hiddenByUserId])
+  @@index([deletedByUserId])
+}
+
+model PostRevision {
+  id              String   @id @default(cuid())
+  postId          String
+  editorUserId    String
+  previousContent String
+  editedAt        DateTime @default(now())
+
+  post   Post @relation(fields: [postId], references: [id])
+  editor User @relation("PostRevisionEditor", fields: [editorUserId], references: [id])
+
+  @@index([postId])
+  @@index([editorUserId])
+}
+
+model Poll {
+  id        String   @id @default(cuid())
+  threadId  String   @unique
+  question  String
+  deadline  DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  thread  Thread       @relation(fields: [threadId], references: [id])
+  options PollOption[]
+  votes   PollVote[]
+}
+
+model PollOption {
+  id        String   @id @default(cuid())
+  pollId    String
+  text      String
+  position  Int
+  createdAt DateTime @default(now())
+
+  poll  Poll       @relation(fields: [pollId], references: [id])
+  votes PollVote[]
+
+  @@unique([pollId, position])
+  @@index([pollId])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  optionId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  poll   Poll       @relation(fields: [pollId], references: [id])
+  option PollOption @relation(fields: [optionId], references: [id])
+  user   User       @relation(fields: [userId], references: [id])
+
+  @@unique([pollId, userId])
+  @@index([optionId])
+  @@index([userId])
+}
+
+model Report {
+  id             String   @id @default(cuid())
+  reporterUserId String
+  reason         String
+  status         ReportStatus @default(PENDING)
+  createdAt      DateTime @default(now())
+
+  // enforce in API that EXACTLY ONE is set (either postId or threadId):
+  postId         String?
+  threadId       String?
+
+  reporter User    @relation(fields: [reporterUserId], references: [id])
+  post     Post?   @relation(fields: [postId], references: [id])
+  thread   Thread? @relation(fields: [threadId], references: [id])
+
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedByUser   User?   @relation("ReportReviewer", fields: [reviewedByUserId], references: [id])
+
+  aiScore    Float?
+  aiLabel    String?
+
+  @@index([reporterUserId])
+  @@index([postId])
+  @@index([threadId])
+}
+
+model Appeal {
+  id               String       @id @default(cuid())
+  userId           String
+  reason           String
+  status           AppealStatus @default(PENDING)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+
+  user           User  @relation("AppealUser", fields: [userId], references: [id])
+  reviewedByUser User? @relation("AppealReviewer", fields: [reviewedByUserId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([reviewedByUserId])
+}
+
+model CacheEntry {
+  key       String   @id
+  payload   Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}

@@ -1,0 +1,491 @@
+openapi: 3.0.0
+info:
+  title: SportsDeck API
+  version: 1.0.0
+  description: ''
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/auth/login:
+    post:
+      summary: Login as Admin
+      responses: {}
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+            example:
+              email: admin@test.com
+              password: admin123
+  /api/auth/signup:
+    post:
+      summary: Signup
+      responses: {}
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                username:
+                  type: string
+            example:
+              email: newuser@test.com
+              password: password123
+              username: newuser
+  /api/auth/me:
+    get:
+      summary: Get Current User
+      responses: {}
+      tags:
+        - Auth
+  /api/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout
+      description: Logout
+      operationId: logout
+      responses:
+        '200':
+          description: ''
+  /api/users/cmmh6o8gw0000iqud2bvrzr4x:
+    get:
+      summary: Get User Profile
+      responses: {}
+      tags:
+        - Users
+  /api/users/me:
+    patch:
+      summary: Edit My Profile
+      responses: {}
+      tags:
+        - Users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                bio:
+                  type: string
+                favoriteTeamId:
+                  type: string
+                  format: utc-millisec
+            example:
+              username: admin
+              bio: I love football
+              favoriteTeamId: '57'
+  /api/users/cmmh6o8gw0000iqud2bvrzr4x/activity:
+    get:
+      summary: User Activity
+      parameters:
+        - name: from
+          in: query
+          required: false
+          deprecated: false
+          schema: {}
+          example: '2026-01-01'
+        - name: to
+          in: query
+          required: false
+          deprecated: false
+          schema: {}
+          example: '2026-03-08'
+      responses: {}
+      tags:
+        - Users
+  /api/users/cmmgwmcob0000txud01ja54dl/follow:
+    post:
+      summary: Follow User
+      responses: {}
+      tags:
+        - Follows
+    delete:
+      summary: Unfollow User
+      responses: {}
+      tags:
+        - Follows
+  /api/users/me/following:
+    get:
+      summary: My Following List
+      responses: {}
+      tags:
+        - Follows
+  /api/users/me/followers:
+    get:
+      summary: My Followers List
+      responses: {}
+      tags:
+        - Follows
+  /api/users/me/followers/cmmgwmcob0000txud01ja54dl:
+    delete:
+      summary: Remove Followers
+      responses: {}
+      tags:
+        - Follows
+  /api/threads:
+    get:
+      summary: List Threads
+      parameters:
+        - name: q
+          in: query
+          required: false
+          deprecated: false
+          schema: {}
+          example: match
+      responses: {}
+      tags:
+        - Threads
+    post:
+      summary: Create Thread
+      responses: {}
+      tags:
+        - Threads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                content:
+                  type: string
+                forumType:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+            example:
+              title: Match Discussion
+              content: Excited for today!
+              forumType: GENERAL
+              tags:
+                - football
+                - premier-league
+  /api/threads/cmmhci17000006zud0wv22ai9:
+    get:
+      summary: Get Thread by ID
+      responses: {}
+      tags:
+        - Threads
+    patch:
+      summary: Edit Thread
+      responses: {}
+      tags:
+        - Threads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+            example:
+              title: Updated Match Discussion
+    delete:
+      summary: Delete Thread
+      responses: {}
+      tags:
+        - Threads
+  /api/threads/cmmhci17000006zud0wv22ai9/posts:
+    post:
+      summary: Create Post
+      responses: {}
+      tags:
+        - Posts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+            example:
+              content: Great discussion everyone!
+  /api/posts/cmmi3ct2g0009buudi4o87kp2:
+    patch:
+      summary: Edit Post
+      responses: {}
+      tags:
+        - Posts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+            example:
+              content: Updated content here
+    delete:
+      summary: Delete Post
+      responses: {}
+      tags:
+        - Posts
+  /api/posts/cmmi3ct2g0009buudi4o87kp2/revisions:
+    get:
+      summary: Get Post Revisions
+      responses: {}
+      tags:
+        - Posts
+  /api/sports/teams:
+    get:
+      summary: Get Teams
+      responses: {}
+      tags:
+        - Sports
+  /api/sports/matches:
+    get:
+      summary: Get Matches (Recent)
+      parameters:
+        - name: status
+          in: query
+          required: false
+          deprecated: false
+          schema: {}
+          example: RECENT
+      responses: {}
+      tags:
+        - Sports
+  /api/sports/standings:
+    get:
+      summary: Get Standings
+      responses: {}
+      tags:
+        - Sports
+  /api/sports/matches/538067:
+    get:
+      summary: Get Match by ID
+      responses: {}
+      tags:
+        - Sports
+  /api/sports/sync-match-threads:
+    post:
+      summary: Sync Match Threads
+      responses: {}
+      tags:
+        - Sports
+  /api/feed:
+    get:
+      summary: Get Feed
+      responses: {}
+      tags:
+        - Feed
+  /api/reports:
+    post:
+      summary: Create Report
+      responses: {}
+      tags:
+        - Reports
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetType:
+                  type: string
+                targetId:
+                  type: string
+                reason:
+                  type: string
+            example:
+              targetType: POST
+              targetId: cmmhed5jt0003snudzk95tynr
+              reason: This post is inappropriate
+  /api/appeals:
+    post:
+      summary: Submit Appeal
+      responses: {}
+      tags:
+        - Appeals
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+            example:
+              reason: I did nothing wrong, please unban me
+  /api/admin/reports:
+    get:
+      summary: Get Reports Queue
+      responses: {}
+      tags:
+        - Admin
+  /api/admin/reports/cmmhed8hb0004snudse9pu6yk/dismiss:
+    post:
+      summary: Dismiss Report
+      responses: {}
+      tags:
+        - Admin
+  /api/admin/reports/cmmi4jc0y0000mjudvnw4bxvo/approve:
+    post:
+      summary: Approve Report
+      responses: {}
+      tags:
+        - Admin
+  /api/admin/users/cmmgwmcob0000txud01ja54dl/ban:
+    post:
+      summary: Ban User
+      responses: {}
+      tags:
+        - Admin
+  /api/admin/users/cmmgwmcob0000txud01ja54dl/unban:
+    post:
+      summary: Unban User
+      responses: {}
+      tags:
+        - Admin
+  /api/admin/appeals:
+    get:
+      summary: Get Appeals Queue
+      responses: {}
+      tags:
+        - Admin
+  /api/admin/appeals/cmmi6kdai0003mjudblesnld9/approve:
+    post:
+      summary: Approve Appeal
+      responses: {}
+      tags:
+        - Admin
+  /api/admin/appeals/cmmi6dars0002mjudchkjmjyx/reject:
+    post:
+      summary: Reject Appeal
+      responses: {}
+      tags:
+        - Admin
+  /api/threads/cmmhci17000006zud0wv22ai9/poll:
+    post:
+      summary: Create Poll
+      responses: {}
+      tags:
+        - Polls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                options:
+                  type: array
+                  items:
+                    type: string
+                deadline:
+                  type: string
+                  format: date-time
+            example:
+              question: Who will win the match?
+              options:
+                - Arsenal
+                - Chelsea
+                - Draw
+              deadline: '2026-12-31T23:59:59Z'
+    get:
+      summary: Get Poll Results
+      responses: {}
+      tags:
+        - Polls
+  /api/polls/cmmi9cxcv0009mjudfs8byf4u/vote:
+    post:
+      summary: Vote in Poll
+      responses: {}
+      tags:
+        - Polls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                optionId:
+                  type: string
+            example:
+              optionId: cmmi9cxdu000amjudrd7sw3m9
+  /api/polls/cmmi9cxcv0009mjudfs8byf4u:
+    patch:
+      summary: Edit Poll
+      responses: {}
+      tags:
+        - Polls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                deadline:
+                  type: string
+                  format: date-time
+    delete:
+      summary: Delete Poll
+      responses: {}
+      tags:
+        - Polls
+  /api/ai/translate:
+    post:
+      summary: Translate Post
+      responses: {}
+      tags:
+        - AI
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+            example:
+              text: Bonjour, ce match était incroyable!
+  /api/threads/cmmhci17000006zud0wv22ai9/sentiment:
+    get:
+      summary: Get Thread Sentiment
+      responses: {}
+      tags:
+        - AI
+  /api/digest/daily:
+    get:
+      summary: Get Daily Digest
+      responses: {}
+      tags:
+        - AI
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - BearerAuth: []

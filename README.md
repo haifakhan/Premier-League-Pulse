@@ -1,4 +1,4 @@
-# PP2
+# PP1
 
 
 
@@ -15,14 +15,14 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-git remote add origin https://mcsscm.utm.utoronto.ca/csc309_20261/group_246/PP2.git
+git remote add origin https://mcsscm.utm.utoronto.ca/csc309_20261/group_114/PP1.git
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
-* [Set up project integrations](https://mcsscm.utm.utoronto.ca/csc309_20261/group_246/PP2/-/settings/integrations)
+* [Set up project integrations](https://mcsscm.utm.utoronto.ca/csc309_20261/group_114/PP1/-/settings/integrations)
 
 ## Collaborate with your team
 
