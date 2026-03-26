@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 import prisma from "@/lib/prisma";
 import { getCachedFresh, setCached } from "../../../../../lib/cache.js";
 import { analyzeSentiment, SENTIMENT_MODEL } from "@/lib/ai-sentiment";

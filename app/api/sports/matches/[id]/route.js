@@ -1,6 +1,8 @@
 import { getMatch } from "../../../../../lib/footballData.js";
 import { getOrSetCache, CACHE_TTLS } from "../../../../../lib/cache.js";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(_request, context) {
   const params = await context.params;
   const idRaw = params?.id;

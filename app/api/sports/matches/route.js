@@ -1,6 +1,8 @@
 import { getMatches } from "../../../../lib/footballData.js";
 import { getOrSetCache, CACHE_TTLS } from "../../../../lib/cache.js";
 
+export const dynamic = "force-dynamic";
+
 const VALID_MATCHDAY_MIN = 1;
 const VALID_MATCHDAY_MAX = 38;
 

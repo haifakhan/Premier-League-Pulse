@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 import { createHash } from "crypto";
 import prisma from "@/lib/prisma";
 import { getCachedFresh, setCached } from "../../../../lib/cache.js";

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { getOrSetCache, CACHE_TTLS } from "@/lib/cache";

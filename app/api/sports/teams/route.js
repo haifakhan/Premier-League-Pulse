@@ -1,6 +1,8 @@
 import { getTeams } from "../../../../lib/footballData.js";
 import { getOrSetCache, CACHE_TTLS } from "../../../../lib/cache.js";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const result = await getOrSetCache(

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
