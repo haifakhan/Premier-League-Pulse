@@ -3,47 +3,12 @@ export const dynamic = "force-dynamic";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { getMatches } from "@/lib/footballData";
-
-const WINDOW_DAYS_BEFORE = 14;
-const WINDOW_DAYS_AFTER = 14;
-const MATCH_DURATION_HOURS = 3;
-
-function dedupeMatches(matches) {
-  const seen = new Set();
-  const result = [];
-
-  for (const match of matches || []) {
-    if (!match || match.id == null) continue;
-    if (seen.has(match.id)) continue;
-    seen.add(match.id);
-    result.push(match);
-  }
-
-  return result;
-}
-
-function buildTitle(match) {
-  const home = match?.homeTeam?.name || "Home";
-  const away = match?.awayTeam?.name || "Away";
-  const matchday = match?.matchday;
-  return matchday
-    ? `${home} vs ${away} — Matchday ${matchday}`
-    : `${home} vs ${away}`;
-}
-
-function buildRootContent(match) {
-  const home = match?.homeTeam?.name || "Home";
-  const away = match?.awayTeam?.name || "Away";
-  return `Auto-generated match thread for ${home} vs ${away}. Discuss below!`;
-}
-
-function getWindowBounds(match) {
-  const matchStart = new Date(match.utcDate);
-  const matchEnd = new Date(matchStart.getTime() + MATCH_DURATION_HOURS * 60 * 60 * 1000);
-  const windowStart = new Date(matchStart.getTime() - WINDOW_DAYS_BEFORE * 24 * 60 * 60 * 1000);
-  const windowEnd = new Date(matchEnd.getTime() + WINDOW_DAYS_AFTER * 24 * 60 * 60 * 1000);
-  return { matchStart, matchEnd, windowStart, windowEnd };
-}
+import {
+  WINDOW_DAYS_AFTER,
+  WINDOW_DAYS_BEFORE,
+  dedupeMatches,
+  ensureMatchThreadLifecycle,
+} from "@/lib/matchThreads";
 
 export async function POST(request) {
   let payload;
@@ -87,82 +52,28 @@ export async function POST(request) {
     const now = new Date();
 
     for (const match of merged) {
-      if (!match?.id || !match?.utcDate) {
-        skipped += 1;
-        continue;
-      }
-
-      const { windowStart, windowEnd } = getWindowBounds(match);
-      const inWindow = now >= windowStart && now <= windowEnd;
-      const matchId = String(match.id);
-
-      const existing = await prisma.thread.findUnique({
-        where: { matchId },
-        select: {
-          id: true,
-          status: true,
-          title: true,
-          forumType: true,
-          teamId: true,
-        },
+      const result = await ensureMatchThreadLifecycle({
+        prismaClient: prisma,
+        match,
+        authorId,
+        now,
       });
 
-      if (inWindow) {
-        const title = buildTitle(match);
-        const desiredForumType = "GENERAL";
-        const desiredTeamId = null;
-
-        if (!existing) {
-          await prisma.$transaction(async (tx) => {
-            const thread = await tx.thread.create({
-              data: {
-                authorId,
-                title,
-                status: "OPEN",
-                forumType: desiredForumType,
-                teamId: desiredTeamId,
-                matchId,
-              },
-              select: { id: true },
-            });
-
-            await tx.post.create({
-              data: {
-                threadId: thread.id,
-                authorId,
-                kind: "ROOT",
-                content: buildRootContent(match),
-              },
-            });
-          });
+      switch (result.action) {
+        case "created":
           created += 1;
-          continue;
-        }
-
-        const updateData = {};
-        if (existing.status !== "OPEN") updateData.status = "OPEN";
-        if (existing.title !== title) updateData.title = title;
-        if (existing.forumType !== desiredForumType) {
-          updateData.forumType = desiredForumType;
-        }
-        if (existing.teamId !== desiredTeamId) updateData.teamId = desiredTeamId;
-
-        if (Object.keys(updateData).length > 0) {
-          await prisma.thread.update({ where: { id: existing.id }, data: updateData });
+          break;
+        case "updated":
           updated += 1;
-        } else {
-          skipped += 1;
-        }
-      } else {
-        if (existing && existing.status === "OPEN") {
-          await prisma.thread.update({
-            where: { id: existing.id },
-            data: { status: "CLOSED" },
-          });
+          break;
+        case "closed":
           closed += 1;
-        } else {
+          break;
+        case "unchanged":
+        case "skipped":
+        default:
           skipped += 1;
-        }
+          break;
       }
     }
 

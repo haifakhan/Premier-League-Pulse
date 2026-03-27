@@ -23,6 +23,17 @@ interface TeamForumItem {
   threadCount: number;
 }
 
+interface MatchDetailApiPayload {
+  data?: {
+    homeTeam?: {
+      id?: number;
+    };
+    awayTeam?: {
+      id?: number;
+    };
+  } | null;
+}
+
 const MATCH_THREAD_TAG = "match-thread";
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -64,6 +75,37 @@ function getThreadTagSet(thread: ThreadListItem): Set<string> {
   }
 
   return tags;
+}
+
+function getAssociatedTeamIds(
+  thread: ThreadListItem,
+  matchThreadTeamIdsByThreadId: Record<string, string[]>
+): string[] {
+  const ids = new Set<string>();
+
+  if (thread.forumType === "TEAM" && thread.teamId) {
+    ids.add(thread.teamId);
+  }
+
+  const matchTeamIds = matchThreadTeamIdsByThreadId[thread.id] ?? [];
+  for (const teamId of matchTeamIds) {
+    if (teamId) ids.add(teamId);
+  }
+
+  return Array.from(ids);
+}
+
+async function fetchMatchTeamIds(matchId: string): Promise<string[]> {
+  const response = await fetch(`/api/sports/matches/${matchId}`, { cache: "no-store" });
+  const payload = (await response.json().catch(() => null)) as MatchDetailApiPayload | null;
+  if (!response.ok || !payload?.data) return [];
+
+  const ids = new Set<string>();
+  const homeId = payload.data.homeTeam?.id;
+  const awayId = payload.data.awayTeam?.id;
+  if (typeof homeId === "number") ids.add(String(homeId));
+  if (typeof awayId === "number") ids.add(String(awayId));
+  return Array.from(ids);
 }
 
 function SidebarCard({
@@ -219,6 +261,7 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
 
   const [threads, setThreads] = useState<ThreadListItem[]>([]);
   const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [matchThreadTeamIdsByThreadId, setMatchThreadTeamIdsByThreadId] = useState<Record<string, string[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -243,8 +286,46 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
 
       if (threadsResult.status === "fulfilled") {
         setThreads(threadsResult.value);
+
+        try {
+          const matchThreads = threadsResult.value.filter((thread) => Boolean(thread.matchId));
+          const matchIdToThreads = new Map<string, string[]>();
+
+          for (const thread of matchThreads) {
+            const matchId = thread.matchId;
+            if (!matchId) continue;
+            const existing = matchIdToThreads.get(matchId) ?? [];
+            existing.push(thread.id);
+            matchIdToThreads.set(matchId, existing);
+          }
+
+          const teamIdsByThreadId: Record<string, string[]> = {};
+
+          if (matchIdToThreads.size > 0) {
+            const matchIds = Array.from(matchIdToThreads.keys());
+            const results = await Promise.allSettled(
+              matchIds.map(async (matchId) => ({ matchId, teamIds: await fetchMatchTeamIds(matchId) }))
+            );
+
+            if (!isMounted) return;
+
+            for (const result of results) {
+              if (result.status !== "fulfilled") continue;
+              const threadIds = matchIdToThreads.get(result.value.matchId) ?? [];
+              for (const threadId of threadIds) {
+                teamIdsByThreadId[threadId] = result.value.teamIds;
+              }
+            }
+          }
+
+          setMatchThreadTeamIdsByThreadId(teamIdsByThreadId);
+        } catch (error) {
+          setMatchThreadTeamIdsByThreadId({});
+          errors.push(toErrorMessage(error, "Unable to map match threads to teams."));
+        }
       } else {
         setThreads([]);
+        setMatchThreadTeamIdsByThreadId({});
         errors.push(toErrorMessage(threadsResult.reason, "Unable to load threads."));
       }
 
@@ -282,12 +363,15 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
     const counts = new Map<string, number>();
 
     for (const thread of threads) {
-      if (thread.forumType !== "TEAM" || !thread.teamId) continue;
-      counts.set(thread.teamId, (counts.get(thread.teamId) ?? 0) + 1);
+      const associatedTeamIds = getAssociatedTeamIds(thread, matchThreadTeamIdsByThreadId);
+      if (associatedTeamIds.length === 0) continue;
+      for (const teamId of associatedTeamIds) {
+        counts.set(teamId, (counts.get(teamId) ?? 0) + 1);
+      }
     }
 
     return counts;
-  }, [threads]);
+  }, [threads, matchThreadTeamIdsByThreadId]);
 
   const sidebarTeams = useMemo(() => {
     const items: TeamForumItem[] = teams.map((team) => ({
@@ -349,8 +433,8 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
     }
 
     if (effectiveSelectedTeamId) {
-      next = next.filter(
-        (thread) => thread.forumType === "TEAM" && thread.teamId === effectiveSelectedTeamId
+      next = next.filter((thread) =>
+        getAssociatedTeamIds(thread, matchThreadTeamIdsByThreadId).includes(effectiveSelectedTeamId)
       );
     }
 
@@ -368,8 +452,13 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
         if (Array.from(tags).some((tag) => tag.includes(q))) {
           return true;
         }
-        const team = thread.teamId ? teamLookup.get(thread.teamId) : null;
-        if (team && team.name.toLowerCase().includes(q)) return true;
+        const associatedTeamIds = getAssociatedTeamIds(thread, matchThreadTeamIdsByThreadId);
+        for (const teamId of associatedTeamIds) {
+          const team = teamLookup.get(teamId);
+          if (team && team.name.toLowerCase().includes(q)) {
+            return true;
+          }
+        }
         return false;
       });
     }
@@ -390,7 +479,16 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
     });
 
     return next;
-  }, [threads, forumScope, effectiveSelectedTeamId, selectedTag, searchQuery, sortMode, teamLookup]);
+  }, [
+    threads,
+    forumScope,
+    effectiveSelectedTeamId,
+    selectedTag,
+    searchQuery,
+    sortMode,
+    teamLookup,
+    matchThreadTeamIdsByThreadId,
+  ]);
 
   function updateTeamQuery(nextTeamId: string | null) {
     if (typeof window === "undefined") return;
