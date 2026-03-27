@@ -68,7 +68,8 @@ export async function POST(request) {
     const token = signToken({ id: user.id, email: user.email, role: user.role });
 
     return NextResponse.json({ user, token }, { status: 201 });
-  } catch {
+  } catch (error) {
+    console.error(error);
     return NextResponse.json({ error: "Failed to create account" }, { status: 500 });
   }
 }
