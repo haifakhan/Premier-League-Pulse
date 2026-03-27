@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
@@ -17,7 +18,9 @@ import {
   updatePost,
   voteInPoll,
 } from "@/lib/api/threads";
+import { getTeams, type TeamOption } from "@/lib/api/sports";
 import { useAuth } from "@/lib/context/auth";
+import { ForumBadge, ForumTagPill, ForumTeamCrest, ForumUserAvatar } from "@/components/forums/forum-ui";
 
 type RevisionState = {
   isLoading: boolean;
@@ -50,6 +53,14 @@ function mergePost(existing: ThreadPost, updated: ThreadPost) {
     author: updated.author ?? existing.author,
     parentPostId: updated.parentPostId ?? existing.parentPostId,
   };
+}
+
+function ArrowLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="m15 5-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function toDateTimeLocalValue(value: string) {
@@ -106,31 +117,36 @@ function PollCard({
   const showVoteButtons = isLoggedIn && !closed && !hasVoted;
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-700">Poll</p>
-          <h2 className="text-xl font-semibold text-slate-900">{poll.question}</h2>
+    <section className="rounded-2xl border border-slate-300/80 bg-white/90 p-5 shadow-sm backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/80 dark:shadow-black/25 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <ForumBadge tone="sky">Poll</ForumBadge>
+            <ForumBadge tone={closed ? "warning" : "success"}>{closed ? "Closed" : "Open"}</ForumBadge>
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            {poll.question}
+          </h2>
         </div>
-        <div className="text-right text-sm text-slate-500">
-          <p>{closed ? "Closed" : "Open"}</p>
-          <p>Deadline: {formatTimestamp(poll.deadline)}</p>
-        </div>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Deadline: {formatTimestamp(poll.deadline)}</p>
       </div>
 
-      <div className="mt-5 space-y-4">
+      <div className="mt-5 space-y-3">
         {poll.options.map((option) => {
           const percentage = poll.totalVotes > 0 ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
 
           return (
-            <div key={option.id} className="space-y-2 rounded-2xl border border-slate-200 p-4">
+            <div
+              key={option.id}
+              className="space-y-2 rounded-xl border border-slate-300/80 bg-slate-100/70 p-4 dark:border-slate-700/70 dark:bg-slate-800/70"
+            >
               <div className="flex items-center justify-between gap-4">
-                <span className="font-medium text-slate-900">{option.text}</span>
-                <span className="text-sm text-slate-600">
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{option.text}</span>
+                <span className="text-xs text-slate-600 dark:text-slate-300">
                   {option.votes} vote{option.votes === 1 ? "" : "s"} ({percentage}%)
                 </span>
               </div>
-              <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-300/70 dark:bg-slate-700/70">
                 <div
                   className="h-full rounded-full bg-sky-500 transition-[width]"
                   style={{ width: `${percentage}%` }}
@@ -141,7 +157,7 @@ function PollCard({
                   type="button"
                   onClick={() => onVote(option.id)}
                   disabled={isSubmittingVote}
-                  className="rounded-full border border-sky-600 px-4 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+                  className="rounded-full border border-sky-400/70 bg-sky-100/80 px-4 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-500 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200 dark:hover:bg-sky-500/30 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-400"
                 >
                   {isSubmittingVote ? "Submitting..." : "Vote"}
                 </button>
@@ -151,20 +167,21 @@ function PollCard({
         })}
       </div>
 
-      <div className="mt-4 text-sm text-slate-600">
+      <div className="mt-4 text-sm text-slate-600 dark:text-slate-300">
         <p>Total votes: {poll.totalVotes}</p>
         {!isLoggedIn && !closed ? <p>Log in to vote.</p> : null}
         {hasVoted ? <p>You have already voted in this poll.</p> : null}
         {closed ? <p>Voting for this poll has closed.</p> : null}
       </div>
 
-      {voteError ? <p className="mt-3 text-sm text-red-600">{voteError}</p> : null}
+      {voteError ? <p className="mt-3 text-sm text-red-600 dark:text-red-300">{voteError}</p> : null}
     </section>
   );
 }
 
 function PostCard({
   post,
+  variant,
   canManage,
   isClosed,
   revisionState,
@@ -181,6 +198,7 @@ function PostCard({
   onToggleHistory,
 }: {
   post: ThreadPost;
+  variant: "root" | "reply";
   canManage: boolean;
   isClosed: boolean;
   revisionState: RevisionState;
@@ -197,16 +215,32 @@ function PostCard({
   onToggleHistory: () => Promise<void>;
 }) {
   const isEdited = revisionState.revisions.length > 0;
+  const isRoot = variant === "root";
 
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <article
+      className={[
+        "rounded-2xl border shadow-sm backdrop-blur",
+        isRoot
+          ? "border-slate-300/80 bg-white/95 p-6 dark:border-slate-700/70 dark:bg-slate-900/85 dark:shadow-black/25"
+          : "border-slate-300/75 bg-white/85 p-5 dark:border-slate-700/65 dark:bg-slate-900/75 dark:shadow-black/20",
+      ].join(" ")}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-base font-semibold text-slate-900">{post.author?.username ?? "Unknown user"}</p>
-          <p className="text-sm text-slate-500">
-            {formatTimestamp(post.createdAt)}
-            {isEdited ? " • edited" : ""}
-          </p>
+        <div className="flex items-start gap-3">
+          <ForumUserAvatar
+            name={post.author?.username ?? "Unknown user"}
+            className={isRoot ? "h-10 w-10" : "h-9 w-9"}
+          />
+          <div>
+            <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              {post.author?.username ?? "Unknown user"}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {formatTimestamp(post.createdAt)}
+              {isEdited ? " • edited" : ""}
+            </p>
+          </div>
         </div>
 
         {canManage ? (
@@ -215,7 +249,7 @@ function PostCard({
               type="button"
               onClick={isEditing ? onEditCancel : onEditStart}
               disabled={isDeleting || isClosed}
-              className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400"
+              className="rounded-full border border-slate-300/80 bg-slate-100/80 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
             >
               {isEditing ? "Cancel" : "Edit"}
             </button>
@@ -223,7 +257,7 @@ function PostCard({
               type="button"
               onClick={() => void onDelete()}
               disabled={isDeleting || isSavingEdit || isClosed}
-              className="rounded-full border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:border-red-400 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+              className="rounded-full border border-red-300/80 bg-red-50/80 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-400 hover:bg-red-100/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-red-500/60 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
             >
               {isDeleting ? "Deleting..." : "Delete"}
             </button>
@@ -236,16 +270,16 @@ function PostCard({
           <textarea
             value={editDraft}
             onChange={(event) => onEditDraftChange(event.target.value)}
-            className="min-h-28 w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+            className="min-h-28 w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
             placeholder="Update your post"
             required
           />
-          {editError ? <p className="text-sm text-red-600">{editError}</p> : null}
+          {editError ? <p className="text-sm text-red-600 dark:text-red-300">{editError}</p> : null}
           <div className="flex gap-3">
             <button
               type="submit"
               disabled={isSavingEdit}
-              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
             >
               {isSavingEdit ? "Saving..." : "Save"}
             </button>
@@ -253,14 +287,21 @@ function PostCard({
               type="button"
               onClick={onEditCancel}
               disabled={isSavingEdit}
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400"
+              className="rounded-full border border-slate-300/80 bg-slate-100/80 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:text-slate-500"
             >
               Cancel
             </button>
           </div>
         </form>
       ) : (
-        <div className="mt-4 whitespace-pre-wrap text-slate-800">{post.content}</div>
+        <div
+          className={[
+            "mt-4 whitespace-pre-wrap text-slate-800 dark:text-slate-200",
+            isRoot ? "text-base leading-7" : "text-sm leading-6",
+          ].join(" ")}
+        >
+          {post.content}
+        </div>
       )}
 
       {isEdited || revisionState.isOpen ? (
@@ -268,24 +309,31 @@ function PostCard({
           <button
             type="button"
             onClick={() => void onToggleHistory()}
-            className="text-sm font-medium text-sky-700 transition hover:text-sky-600"
+            className="text-xs font-semibold text-sky-700 transition hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
           >
             {revisionState.isOpen ? "Hide edit history" : "View edit history"}
           </button>
 
           {revisionState.isOpen ? (
-            <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              {revisionState.isLoading ? <p className="text-sm text-slate-600">Loading revisions...</p> : null}
-              {revisionState.error ? <p className="text-sm text-red-600">{revisionState.error}</p> : null}
+            <div className="mt-3 space-y-3 rounded-xl border border-slate-300/80 bg-slate-100/70 p-4 dark:border-slate-700/70 dark:bg-slate-800/70">
+              {revisionState.isLoading ? (
+                <p className="text-sm text-slate-600 dark:text-slate-300">Loading revisions...</p>
+              ) : null}
+              {revisionState.error ? (
+                <p className="text-sm text-red-600 dark:text-red-300">{revisionState.error}</p>
+              ) : null}
               {!revisionState.isLoading && !revisionState.error && revisionState.revisions.length === 0 ? (
-                <p className="text-sm text-slate-600">No previous versions.</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">No previous versions.</p>
               ) : null}
               {revisionState.revisions.map((revision) => (
-                <div key={revision.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <p className="text-sm text-slate-500">
+                <div
+                  key={revision.id}
+                  className="rounded-xl border border-slate-300/80 bg-white/85 p-4 dark:border-slate-700/70 dark:bg-slate-900/80"
+                >
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
                     {revision.editor.username} edited this on {formatTimestamp(revision.editedAt)}
                   </p>
-                  <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+                  <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
                     {revision.previousContent}
                   </div>
                 </div>
@@ -305,6 +353,7 @@ export default function ThreadPage() {
 
   const [thread, setThread] = useState<ThreadDetail | null>(null);
   const [poll, setPoll] = useState<ThreadPoll | null>(null);
+  const [teamsById, setTeamsById] = useState<Record<string, TeamOption>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState("");
@@ -346,7 +395,7 @@ export default function ThreadPage() {
       setVoteError(null);
 
       try {
-        const [threadData, pollData] = await Promise.all([
+        const [threadData, pollData, teamsData] = await Promise.all([
           getThread(threadId),
           getThreadPoll(threadId).catch((error) => {
             if (error instanceof ThreadApiError && error.status === 404) {
@@ -355,6 +404,7 @@ export default function ThreadPage() {
 
             throw error;
           }),
+          getTeams().catch(() => []),
         ]);
 
         if (cancelled) {
@@ -363,6 +413,9 @@ export default function ThreadPage() {
 
         setThread(threadData);
         setPoll(pollData);
+        setTeamsById(
+          Object.fromEntries(teamsData.map((team) => [team.id, team]))
+        );
         setReplyDraft("");
         setReplyError(null);
         setActiveEditPostId(null);
@@ -473,14 +526,14 @@ export default function ThreadPage() {
   }, [thread, revisionStates]);
 
   if (isLoading) {
-    return <p className="text-sm text-slate-600">Loading thread...</p>;
+    return <p className="text-sm text-slate-600 dark:text-slate-300">Loading thread...</p>;
   }
 
   if (loadError) {
     return (
-      <section className="mx-auto max-w-4xl rounded-3xl border border-red-200 bg-red-50 p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Thread unavailable</h1>
-        <p className="mt-2 text-sm text-red-700">{loadError}</p>
+      <section className="mx-auto max-w-4xl rounded-2xl border border-red-300/80 bg-red-100/80 p-6 dark:border-red-600/60 dark:bg-red-900/20">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Thread unavailable</h1>
+        <p className="mt-2 text-sm text-red-700 dark:text-red-300">{loadError}</p>
       </section>
     );
   }
@@ -491,6 +544,8 @@ export default function ThreadPage() {
 
   const isClosed = thread.status !== "OPEN";
   const replies = sortPosts(thread.replies);
+  const teamMeta = thread.teamId ? teamsById[thread.teamId] ?? null : null;
+  const repliesCount = replies.length;
   const canReply = Boolean(user && token && !isClosed);
   const hasVotedInPoll = poll ? Boolean(hasVotedPollIds[poll.id]) : false;
   const canCreatePoll = Boolean(user && token && thread.author.id === user.id && !poll && !isClosed);
@@ -789,33 +844,57 @@ export default function ThreadPage() {
   }
 
   return (
-    <section className="mx-auto max-w-4xl space-y-6">
-      <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-sky-700">Forum Thread</p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-900">{thread.title}</h1>
-            <p className="mt-2 text-sm text-slate-500">
-              Started by {thread.author.username} on {formatTimestamp(thread.createdAt)}
-            </p>
-          </div>
-
-          {thread.tags.length ? (
-            <div className="flex flex-wrap gap-2">
-              {thread.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-600"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
+    <section className="mx-auto max-w-4xl space-y-5">
+      <header className="rounded-2xl border border-slate-300/80 bg-white/95 p-5 shadow-sm backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/80 dark:shadow-black/25 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <Link
+            href="/forums"
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300/80 bg-slate-100/80 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80"
+          >
+            <ArrowLeftIcon className="h-3.5 w-3.5" />
+            Back to Forums
+          </Link>
         </div>
 
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <ForumBadge tone={isClosed ? "warning" : "success"}>{thread.status}</ForumBadge>
+          <ForumBadge tone={thread.forumType === "TEAM" ? "sky" : "neutral"}>
+            {thread.forumType === "TEAM" ? "Team Forum" : "General Forum"}
+          </ForumBadge>
+          {thread.teamId ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-300/80 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700 dark:border-slate-600/70 dark:bg-slate-800/90 dark:text-slate-200">
+              <ForumTeamCrest
+                src={teamMeta?.crest ?? null}
+                teamName={teamMeta?.name ?? `Team ${thread.teamId}`}
+                className="h-4 w-4"
+              />
+              {teamMeta?.shortName ?? teamMeta?.name ?? `Team ${thread.teamId}`}
+            </span>
+          ) : null}
+          {thread.matchId ? <ForumBadge tone="sky">Match Thread</ForumBadge> : null}
+        </div>
+
+        <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100">
+          {thread.title}
+        </h1>
+
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+          <span>By {thread.author.username}</span>
+          <span>{formatTimestamp(thread.createdAt)}</span>
+          <span>{repliesCount} replies</span>
+          <span>Views —</span>
+        </div>
+
+        {thread.tags.length ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {thread.tags.map((tag) => (
+              <ForumTagPill key={tag}>{tag}</ForumTagPill>
+            ))}
+          </div>
+        ) : null}
+
         {isClosed ? (
-          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="mt-4 rounded-xl border border-amber-300/80 bg-amber-100/80 px-4 py-3 text-sm text-amber-800 dark:border-amber-600/70 dark:bg-amber-900/20 dark:text-amber-200">
             This thread is closed. New replies are not available right now.
           </div>
         ) : null}
@@ -831,17 +910,19 @@ export default function ThreadPage() {
           onVote={handleVote}
         />
       ) : canCreatePoll ? (
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-2xl border border-dashed border-slate-300/80 bg-white/90 p-5 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/75 dark:shadow-black/20 sm:p-6">
           {!showCreatePollForm ? (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Create Poll</h2>
-                <p className="text-sm text-slate-600">Add one poll to this thread for readers to vote on.</p>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Create Poll</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Add one poll to this thread for readers to vote on.
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreatePollForm(true)}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+                className="rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
               >
                 Create Poll
               </button>
@@ -849,12 +930,14 @@ export default function ThreadPage() {
           ) : (
             <form onSubmit={(event) => void handleCreatePoll(event)} className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Create Poll</h2>
-                <p className="text-sm text-slate-600">Polls need a question, at least 2 options, and a deadline.</p>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Create Poll</h2>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  Polls need a question, at least 2 options, and a deadline.
+                </p>
               </div>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-700">Question</span>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Question</span>
                 <input
                   type="text"
                   value={pollForm.question}
@@ -863,16 +946,18 @@ export default function ThreadPage() {
                     setPollFormError(null);
                     setPollFormErrors((current) => ({ ...current, question: undefined }));
                   }}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
                   placeholder="What should the community vote on?"
                   required
                 />
-                {pollFormErrors.question ? <p className="text-sm text-red-600">{pollFormErrors.question}</p> : null}
+                {pollFormErrors.question ? (
+                  <p className="text-sm text-red-600 dark:text-red-300">{pollFormErrors.question}</p>
+                ) : null}
               </label>
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium text-slate-700">Options</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Options</span>
                   <button
                     type="button"
                     onClick={() =>
@@ -881,7 +966,7 @@ export default function ThreadPage() {
                         options: [...current.options, ""],
                       }))
                     }
-                    className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                    className="rounded-full border border-slate-300/80 bg-slate-100/80 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80"
                   >
                     Add option
                   </button>
@@ -902,7 +987,7 @@ export default function ThreadPage() {
                         setPollFormError(null);
                         setPollFormErrors((current) => ({ ...current, options: undefined }));
                       }}
-                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+                      className="w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
                       placeholder={`Option ${index + 1}`}
                       required={index < 2}
                     />
@@ -915,18 +1000,20 @@ export default function ThreadPage() {
                         }))
                       }
                       disabled={pollForm.options.length <= 2}
-                      className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                      className="rounded-full border border-slate-300/80 bg-slate-100/80 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
                     >
                       Remove
                     </button>
                   </div>
                 ))}
 
-                {pollFormErrors.options ? <p className="text-sm text-red-600">{pollFormErrors.options}</p> : null}
+                {pollFormErrors.options ? (
+                  <p className="text-sm text-red-600 dark:text-red-300">{pollFormErrors.options}</p>
+                ) : null}
               </div>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium text-slate-700">Deadline</span>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Deadline</span>
                 <input
                   type="datetime-local"
                   value={pollForm.deadline}
@@ -936,19 +1023,21 @@ export default function ThreadPage() {
                     setPollFormError(null);
                     setPollFormErrors((current) => ({ ...current, deadline: undefined }));
                   }}
-                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
                   required
                 />
-                {pollFormErrors.deadline ? <p className="text-sm text-red-600">{pollFormErrors.deadline}</p> : null}
+                {pollFormErrors.deadline ? (
+                  <p className="text-sm text-red-600 dark:text-red-300">{pollFormErrors.deadline}</p>
+                ) : null}
               </label>
 
-              {pollFormError ? <p className="text-sm text-red-600">{pollFormError}</p> : null}
+              {pollFormError ? <p className="text-sm text-red-600 dark:text-red-300">{pollFormError}</p> : null}
 
               <div className="flex gap-3">
                 <button
                   type="submit"
                   disabled={isCreatingPoll}
-                  className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
                 >
                   {isCreatingPoll ? "Creating..." : "Create Poll"}
                 </button>
@@ -956,7 +1045,7 @@ export default function ThreadPage() {
                   type="button"
                   onClick={resetPollForm}
                   disabled={isCreatingPoll}
-                  className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400"
+                  className="rounded-full border border-slate-300/80 bg-slate-100/80 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:text-slate-500"
                 >
                   Cancel
                 </button>
@@ -968,12 +1057,13 @@ export default function ThreadPage() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Main Post</h2>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Main Post</h2>
         </div>
 
         {thread.rootPost ? (
           <PostCard
             post={thread.rootPost}
+            variant="root"
             canManage={user?.id === thread.rootPost.author?.id}
             isClosed={isClosed}
             revisionState={
@@ -999,7 +1089,7 @@ export default function ThreadPage() {
             onToggleHistory={() => toggleHistory(thread.rootPost!.id)}
           />
         ) : (
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+          <div className="rounded-2xl border border-slate-300/80 bg-white/85 p-6 text-sm text-slate-600 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/75 dark:text-slate-300 dark:shadow-black/20">
             The main post has been deleted.
           </div>
         )}
@@ -1007,8 +1097,8 @@ export default function ThreadPage() {
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold text-slate-900">Replies</h2>
-          <span className="text-sm text-slate-500">{replies.length} posts</span>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Replies</h2>
+          <span className="text-sm text-slate-500 dark:text-slate-400">{replies.length} posts</span>
         </div>
 
         {replies.length ? (
@@ -1016,6 +1106,7 @@ export default function ThreadPage() {
             <PostCard
               key={post.id}
               post={post}
+              variant="reply"
               canManage={user?.id === post.author?.id}
               isClosed={isClosed}
               revisionState={
@@ -1040,35 +1131,35 @@ export default function ThreadPage() {
             />
           ))
         ) : (
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+          <div className="rounded-2xl border border-slate-300/80 bg-white/85 p-6 text-sm text-slate-600 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/75 dark:text-slate-300 dark:shadow-black/20">
             No replies yet.
           </div>
         )}
       </section>
 
       {canReply ? (
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-slate-900">Reply to Thread</h2>
+        <section className="rounded-2xl border border-slate-300/80 bg-white/90 p-5 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/80 dark:shadow-black/25 sm:p-6">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Reply to Thread</h2>
           <form onSubmit={(event) => void handleReplySubmit(event)} className="mt-4 space-y-4">
             <textarea
               value={replyDraft}
               onChange={(event) => setReplyDraft(event.target.value)}
-              className="min-h-32 w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+              className="min-h-32 w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
               placeholder="Write your reply"
               required
             />
-            {replyError ? <p className="text-sm text-red-600">{replyError}</p> : null}
+            {replyError ? <p className="text-sm text-red-600 dark:text-red-300">{replyError}</p> : null}
             <button
               type="submit"
               disabled={isReplying}
-              className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
             >
               {isReplying ? "Posting..." : "Post Reply"}
             </button>
           </form>
         </section>
       ) : (
-        <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+        <section className="rounded-2xl border border-slate-300/80 bg-slate-100/70 p-6 text-sm text-slate-600 dark:border-slate-700/70 dark:bg-slate-800/70 dark:text-slate-300">
           {isClosed
             ? "This thread is closed, so replies are disabled."
             : isAuthLoading
