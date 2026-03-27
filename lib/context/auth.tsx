@@ -17,6 +17,7 @@ type AuthContextValue = {
   isLoading: boolean;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -46,13 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const initialToken = storedToken;
     let cancelled = false;
 
     async function hydrateAuth() {
-      setToken(storedToken);
+      setToken(initialToken);
 
       try {
-        const currentUser = await resolveUserFromToken(storedToken);
+        const currentUser = await resolveUserFromToken(initialToken);
 
         if (!cancelled) {
           setUser(currentUser);
@@ -109,8 +111,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push("/login");
   }
 
+  async function refreshUser() {
+    const currentToken = activeTokenRef.current;
+
+    if (!currentToken) {
+      setUser(null);
+      return;
+    }
+
+    const currentUser = await resolveUserFromToken(currentToken);
+    setUser(currentUser);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

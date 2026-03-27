@@ -35,6 +35,20 @@ type ApiErrorResponse = {
   error?: string;
 };
 
+function getApiErrorMessage(data: unknown, fallback: string) {
+  if (
+    data &&
+    typeof data === "object" &&
+    "error" in data &&
+    typeof data.error === "string" &&
+    data.error.trim()
+  ) {
+    return data.error;
+  }
+
+  return fallback;
+}
+
 export class AuthApiError extends Error {
   status: number;
 
@@ -60,7 +74,7 @@ async function postAuth<TInput>(url: string, body: TInput): Promise<AuthResponse
     | null;
 
   if (!response.ok) {
-    throw new AuthApiError(data?.error || "Request failed", response.status);
+    throw new AuthApiError(getApiErrorMessage(data, "Request failed"), response.status);
   }
 
   if (!data || typeof data !== "object" || !("token" in data) || !("user" in data)) {
@@ -91,7 +105,7 @@ export async function getCurrentUser(token: string): Promise<AuthUser> {
     | null;
 
   if (!response.ok) {
-    throw new AuthApiError(data?.error || "Request failed", response.status);
+    throw new AuthApiError(getApiErrorMessage(data, "Request failed"), response.status);
   }
 
   if (!data || typeof data !== "object" || !("user" in data)) {
