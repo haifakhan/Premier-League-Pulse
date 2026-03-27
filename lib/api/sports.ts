@@ -21,6 +21,7 @@ export interface Match {
   id: number;
   utcDate: string;
   status: string;
+  stage?: string | null;
   venue: string | null;
   matchday: number | null;
   homeTeam: MatchTeam;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getMatchesByStatus, type Match } from "@/lib/api/sports";
 
 interface TeamLogoProps {
@@ -12,6 +12,18 @@ interface MatchCardProps {
   match: Match;
   isCompleted: boolean;
 }
+
+type MatchdayKind = "all" | "matchday" | "stage";
+
+interface Matchday {
+  id: string;
+  label: string;
+  kind: MatchdayKind;
+  matchday: number | null;
+  stage: string | null;
+}
+
+const ALL_MATCHDAY_ID = "all";
 
 function getShortName(name: string): string {
   const parts = name
@@ -37,6 +49,91 @@ function formatMatchTime(utcDate: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(utcDate));
+}
+
+function formatStageLabel(stage: string): string {
+  return stage
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function buildStageId(stage: string): string {
+  return `stage-${stage
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")}`;
+}
+
+function buildMatchdayOptions(matches: Match[]): Matchday[] {
+  const matchdays = Array.from(
+    new Set(
+      matches
+        .map((match) => match.matchday)
+        .filter((matchday): matchday is number => typeof matchday === "number")
+    )
+  )
+    .sort((a, b) => a - b)
+    .map((matchday) => ({
+      id: `matchday-${matchday}`,
+      label: `Matchday ${matchday}`,
+      kind: "matchday" as const,
+      matchday,
+      stage: null,
+    }));
+
+  const stageLookup = new Map<string, string>();
+  matches.forEach((match) => {
+    if (match.matchday !== null) return;
+    if (!match.stage || !match.stage.trim()) return;
+
+    const stage = match.stage.trim();
+    const normalizedKey = stage.toLowerCase();
+    if (!stageLookup.has(normalizedKey)) {
+      stageLookup.set(normalizedKey, stage);
+    }
+  });
+
+  const stages = Array.from(stageLookup.values())
+    .sort((a, b) => a.localeCompare(b))
+    .map((stage) => ({
+      id: buildStageId(stage),
+      label: formatStageLabel(stage),
+      kind: "stage" as const,
+      matchday: null,
+      stage,
+    }));
+
+  return [
+    {
+      id: ALL_MATCHDAY_ID,
+      label: "All",
+      kind: "all",
+      matchday: null,
+      stage: null,
+    },
+    ...matchdays,
+    ...stages,
+  ];
+}
+
+function filterMatchesByMatchday(matches: Match[], selectedMatchday: Matchday): Match[] {
+  if (selectedMatchday.kind === "all") return matches;
+
+  if (selectedMatchday.kind === "matchday") {
+    return matches.filter((match) => match.matchday === selectedMatchday.matchday);
+  }
+
+  const selectedStage = selectedMatchday.stage?.trim().toLowerCase();
+  if (!selectedStage) return matches;
+
+  return matches.filter((match) => {
+    if (match.matchday !== null) return false;
+    if (!match.stage || !match.stage.trim()) return false;
+    return match.stage.trim().toLowerCase() === selectedStage;
+  });
 }
 
 function TeamLogo({ src, teamName }: TeamLogoProps) {
@@ -157,6 +254,25 @@ function MatchGridSkeleton() {
   );
 }
 
+function MatchdayPillsSkeleton() {
+  return (
+    <div className="relative">
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
+      <div className="scrollbar-hide overflow-x-auto">
+        <div className="inline-flex min-w-full gap-2 whitespace-nowrap py-1">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div
+              key={`matchday-pill-skeleton-${index}`}
+              className="h-9 w-24 animate-pulse rounded-full border border-slate-200 bg-slate-200/80 dark:border-slate-700 dark:bg-slate-800"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="mb-5 border-l-4 border-fuchsia-500 pl-4">
@@ -181,10 +297,38 @@ function sortByUtcDate(matches: Match[], order: "asc" | "desc"): Match[] {
 }
 
 export default function MatchesPage() {
-  const [upcomingMatches, setUpcomingMatches] = useState<Match[]>([]);
-  const [recentMatches, setRecentMatches] = useState<Match[]>([]);
+  const [allUpcomingMatches, setAllUpcomingMatches] = useState<Match[]>([]);
+  const [allRecentMatches, setAllRecentMatches] = useState<Match[]>([]);
+  const [selectedMatchdayId, setSelectedMatchdayId] = useState<string>(ALL_MATCHDAY_ID);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const matchdayOptions = useMemo(
+    () => buildMatchdayOptions([...allUpcomingMatches, ...allRecentMatches]),
+    [allUpcomingMatches, allRecentMatches]
+  );
+
+  const selectedMatchday = useMemo(
+    () =>
+      matchdayOptions.find((option) => option.id === selectedMatchdayId) ?? {
+        id: ALL_MATCHDAY_ID,
+        label: "All",
+        kind: "all" as const,
+        matchday: null,
+        stage: null,
+      },
+    [matchdayOptions, selectedMatchdayId]
+  );
+
+  const upcomingMatches = useMemo(
+    () => filterMatchesByMatchday(allUpcomingMatches, selectedMatchday),
+    [allUpcomingMatches, selectedMatchday]
+  );
+
+  const recentMatches = useMemo(
+    () => filterMatchesByMatchday(allRecentMatches, selectedMatchday),
+    [allRecentMatches, selectedMatchday]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -203,16 +347,16 @@ export default function MatchesPage() {
       const errors: string[] = [];
 
       if (upcomingResult.status === "fulfilled") {
-        setUpcomingMatches(sortByUtcDate(upcomingResult.value, "asc"));
+        setAllUpcomingMatches(sortByUtcDate(upcomingResult.value, "asc"));
       } else {
-        setUpcomingMatches([]);
+        setAllUpcomingMatches([]);
         errors.push(toErrorMessage(upcomingResult.reason, "Unable to load upcoming matches."));
       }
 
       if (recentResult.status === "fulfilled") {
-        setRecentMatches(sortByUtcDate(recentResult.value, "desc"));
+        setAllRecentMatches(sortByUtcDate(recentResult.value, "desc"));
       } else {
-        setRecentMatches([]);
+        setAllRecentMatches([]);
         errors.push(toErrorMessage(recentResult.reason, "Unable to load recent results."));
       }
 
@@ -249,13 +393,52 @@ export default function MatchesPage() {
 
       <section>
         <SectionHeader
+          title="Browse Matchdays"
+          subtitle="Use matchday or stage pills to filter both upcoming matches and recent results."
+        />
+        {isLoading ? (
+          <MatchdayPillsSkeleton />
+        ) : (
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
+            <div className="scrollbar-hide overflow-x-auto">
+              <div className="inline-flex min-w-full gap-2 whitespace-nowrap py-1">
+                {matchdayOptions.map((option) => {
+                  const isSelected = option.id === selectedMatchday.id;
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => setSelectedMatchdayId(option.id)}
+                      className={[
+                        "rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70",
+                        isSelected
+                          ? "border-[#38003c] bg-[#38003c] text-white dark:border-fuchsia-500 dark:bg-fuchsia-500 dark:text-slate-950"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800",
+                      ].join(" ")}
+                      aria-pressed={isSelected}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section>
+        <SectionHeader
           title="Upcoming Matches"
           subtitle="Kickoff schedule with venue details and club matchups."
         />
         {isLoading ? (
           <MatchGridSkeleton />
         ) : upcomingMatches.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 transition-opacity duration-200 md:grid-cols-2 lg:grid-cols-3">
             {upcomingMatches.map((match) => (
               <MatchCard key={match.id} match={match} isCompleted={false} />
             ))}
@@ -275,7 +458,7 @@ export default function MatchesPage() {
         {isLoading ? (
           <MatchGridSkeleton />
         ) : recentMatches.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 transition-opacity duration-200 md:grid-cols-2 lg:grid-cols-3">
             {recentMatches.map((match) => (
               <MatchCard key={match.id} match={match} isCompleted />
             ))}
