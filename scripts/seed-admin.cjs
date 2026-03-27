@@ -2,8 +2,10 @@ require("dotenv/config");
 
 const bcrypt = require("bcrypt");
 const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter });
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@sportsdeck.local";
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
