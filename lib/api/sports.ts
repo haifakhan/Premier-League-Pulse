@@ -1,5 +1,13 @@
 export type MatchStatusQuery = "UPCOMING" | "RECENT";
 
+type TeamApiResponse = {
+  cache: "HIT" | "MISS" | "REFRESH" | "STALE";
+  data: {
+    teams?: TeamResponse[];
+  } | null;
+  error?: ApiErrorPayload | string;
+};
+
 interface MatchScoreLine {
   home: number | null;
   away: number | null;
@@ -15,6 +23,14 @@ interface MatchTeam {
   shortName: string;
   tla: string;
   crest: string | null;
+}
+
+interface TeamResponse {
+  id?: number;
+  name?: string;
+  shortName?: string;
+  tla?: string;
+  crest?: string | null;
 }
 
 export interface Match {
@@ -91,6 +107,14 @@ export interface LeagueStanding {
   };
 }
 
+export interface TeamOption {
+  id: string;
+  name: string;
+  shortName: string;
+  tla: string;
+  crest: string | null;
+}
+
 function getErrorMessage(payload: unknown, fallback: string): string {
   if (typeof payload === "string" && payload.trim()) return payload;
 
@@ -155,6 +179,19 @@ function normalizeStandingRow(row: StandingRow): LeagueStanding | null {
       tla: row.team?.tla ?? teamName.slice(0, 3).toUpperCase(),
       crest: row.team?.crest ?? null,
     },
+  };
+}
+
+function normalizeTeam(team: TeamResponse): TeamOption | null {
+  if (!team || typeof team !== "object") return null;
+  if (typeof team.id !== "number" || typeof team.name !== "string") return null;
+
+  return {
+    id: String(team.id),
+    name: team.name,
+    shortName: team.shortName ?? team.name,
+    tla: team.tla ?? team.name.slice(0, 3).toUpperCase(),
+    crest: team.crest ?? null,
   };
 }
 
@@ -228,4 +265,37 @@ export async function getStandingsTable(): Promise<LeagueStanding[]> {
     .sort((a, b) => a.position - b.position);
 
   return normalized;
+}
+
+export async function getTeams(): Promise<TeamOption[]> {
+  const response = await fetch("/api/sports/teams", {
+    cache: "no-store",
+  });
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const fallback =
+      response.status >= 500
+        ? "Team service is temporarily unavailable. Please try again shortly."
+        : "Unable to load teams.";
+    throw new Error(getErrorMessage(payload, fallback));
+  }
+
+  const typedPayload = payload as TeamApiResponse;
+  const teams = typedPayload?.data?.teams;
+
+  if (!Array.isArray(teams)) {
+    throw new Error("Unexpected teams response format.");
+  }
+
+  return teams
+    .map((team) => normalizeTeam(team))
+    .filter((team): team is TeamOption => team !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
