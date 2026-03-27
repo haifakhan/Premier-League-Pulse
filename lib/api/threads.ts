@@ -5,6 +5,7 @@ type ApiErrorResponse = {
 type AuthorSummary = {
   id: string;
   username: string;
+  avatarUrl?: string | null;
 };
 
 export type ThreadPost = {

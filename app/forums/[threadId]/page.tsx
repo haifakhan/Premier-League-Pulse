@@ -230,6 +230,7 @@ function PostCard({
         <div className="flex items-start gap-3">
           <ForumUserAvatar
             name={post.author?.username ?? "Unknown user"}
+            imageUrl={post.author?.avatarUrl ?? null}
             className={isRoot ? "h-10 w-10" : "h-9 w-9"}
           />
           <div>

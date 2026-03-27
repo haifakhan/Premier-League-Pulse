@@ -70,7 +70,7 @@ export async function GET(request) {
         matchId: true,
         status: true,
         createdAt: true,
-        author: { select: { id: true, username: true } },
+        author: { select: { id: true, username: true, avatarUrl: true } },
         threadTags: { select: { tag: { select: { name: true } } } },
         _count: {
           select: {
