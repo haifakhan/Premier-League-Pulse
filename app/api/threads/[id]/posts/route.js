@@ -89,7 +89,7 @@ export async function POST(request, context) {
         kind: true,
         parentPostId: true,
         createdAt: true,
-        author: { select: { id: true, username: true } },
+        author: { select: { id: true, username: true, avatarUrl: true } },
       },
     });
 

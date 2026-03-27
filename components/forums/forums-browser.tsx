@@ -112,7 +112,11 @@ function ThreadCard({
     >
       <article className="flex gap-3">
         <div className="hidden md:block">
-          <ForumUserAvatar name={thread.author.username} className="h-10 w-10" />
+          <ForumUserAvatar
+            name={thread.author.username}
+            imageUrl={thread.author.avatarUrl ?? null}
+            className="h-10 w-10"
+          />
         </div>
 
         <div className="min-w-0 flex-1 space-y-3">
