@@ -247,16 +247,15 @@ function MatchCard({ match, isCompleted }: MatchCardProps) {
           </span>
         </div>
 
-        <div className="space-y-3 px-4 py-4 md:px-5">
-          <div className="flex items-center gap-3">
-            <TeamLogo src={match.homeTeam.crest} teamName={match.homeTeam.name} />
-            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {match.homeTeam.name}
-            </p>
-          </div>
+        <div className="px-4 py-4 md:px-5">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <TeamLogo src={match.homeTeam.crest} teamName={match.homeTeam.name} />
+              <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {match.homeTeam.name}
+              </p>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
             <span
               className={[
                 "min-w-16 text-center text-sm font-extrabold tracking-[0.16em] uppercase",
@@ -265,14 +264,13 @@ function MatchCard({ match, isCompleted }: MatchCardProps) {
             >
               {resultLabel}
             </span>
-            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-          </div>
 
-          <div className="flex items-center gap-3">
-            <TeamLogo src={match.awayTeam.crest} teamName={match.awayTeam.name} />
-            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {match.awayTeam.name}
-            </p>
+            <div className="flex min-w-0 items-center justify-end gap-2.5">
+              <TeamLogo src={match.awayTeam.crest} teamName={match.awayTeam.name} />
+              <p className="truncate text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {match.awayTeam.name}
+              </p>
+            </div>
           </div>
         </div>
 
