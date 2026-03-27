@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { getMatchesByStatus, type Match } from "@/lib/api/sports";
 
 interface TeamLogoProps {
@@ -38,6 +39,14 @@ const STATUS_FILTER_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
   { id: "upcoming", label: "Upcoming" },
   { id: "recent", label: "Completed" },
 ];
+
+function parseStatusFilter(value: string | null): StatusFilter {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === "upcoming" || normalized === "recent" || normalized === "all") {
+    return normalized;
+  }
+  return "all";
+}
 
 function getShortName(name: string): string {
   const parts = name
@@ -386,13 +395,18 @@ function EmptyState({ statusFilter }: { statusFilter: StatusFilter }) {
   );
 }
 
-export default function MatchesPage() {
+interface MatchesPageContentProps {
+  initialStatusFilter: StatusFilter;
+}
+
+function MatchesPageContent({ initialStatusFilter }: MatchesPageContentProps) {
   const [allUpcomingMatches, setAllUpcomingMatches] = useState<Match[]>([]);
   const [allRecentMatches, setAllRecentMatches] = useState<Match[]>([]);
   const [selectedMatchdayId, setSelectedMatchdayId] = useState<string>(ALL_MATCHDAY_ID);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatusFilter);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const matchdayScrollRef = useRef<HTMLDivElement | null>(null);
 
   const allMatches = useMemo(
     () => [...allUpcomingMatches, ...allRecentMatches],
@@ -492,6 +506,34 @@ export default function MatchesPage() {
     setSelectedMatchdayId(nextMatchday.id);
   }
 
+  function scrollMatchdayChips(direction: "left" | "right") {
+    const scroller = matchdayScrollRef.current;
+    if (!scroller) return;
+
+    const distance = Math.max(180, Math.round(scroller.clientWidth * 0.6));
+    scroller.scrollBy({
+      left: direction === "left" ? -distance : distance,
+      behavior: "smooth",
+    });
+  }
+
+  useEffect(() => {
+    const scroller = matchdayScrollRef.current;
+    if (!scroller) return;
+
+    const selectedButton = Array.from(
+      scroller.querySelectorAll<HTMLButtonElement>("button[data-matchday-option-id]")
+    ).find((button) => button.dataset.matchdayOptionId === selectedMatchday.id);
+
+    if (!selectedButton) return;
+
+    selectedButton.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [selectedMatchday.id, matchdayOptions.length]);
+
   return (
     <div className="space-y-8">
       <section className="relative left-1/2 right-1/2 -mx-[50vw] w-screen border-y border-slate-200 bg-gradient-to-r from-slate-100 via-white to-slate-100 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
@@ -553,34 +595,58 @@ export default function MatchesPage() {
               </button>
             </div>
 
-            <div className="scrollbar-hide overflow-x-auto">
-              <div className="inline-flex min-w-full gap-2 whitespace-nowrap pb-1">
-                {matchdayOptions.map((option) => {
-                  const isSelected = option.id === selectedMatchday.id;
-                  const quickSelectLabel =
-                    option.kind === "matchday" && option.matchday !== null
-                      ? String(option.matchday)
-                      : option.label;
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => scrollMatchdayChips("left")}
+                className="absolute top-1/2 left-0 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                aria-label="Scroll matchday filters left"
+              >
+                <ChevronLeftIcon className="h-4 w-4" />
+              </button>
 
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setSelectedMatchdayId(option.id)}
-                      className={[
-                        "rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-500",
-                        isSelected
-                          ? "border-sky-600 bg-sky-600 text-white dark:border-sky-500 dark:bg-sky-500 dark:text-slate-950"
-                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800",
-                      ].join(" ")}
-                      aria-pressed={isSelected}
-                      aria-label={option.label}
-                    >
-                      {quickSelectLabel}
-                    </button>
-                  );
-                })}
+              <div
+                ref={matchdayScrollRef}
+                className="scrollbar-hide overflow-x-auto overflow-y-hidden px-10 [touch-action:pan-x]"
+              >
+                <div className="flex w-max min-w-full gap-2 whitespace-nowrap pb-1 pr-1">
+                  {matchdayOptions.map((option) => {
+                    const isSelected = option.id === selectedMatchday.id;
+                    const quickSelectLabel =
+                      option.kind === "matchday" && option.matchday !== null
+                        ? String(option.matchday)
+                        : option.label;
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setSelectedMatchdayId(option.id)}
+                        className={[
+                          "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-500",
+                          isSelected
+                            ? "border-sky-600 bg-sky-600 text-white dark:border-sky-500 dark:bg-sky-500 dark:text-slate-950"
+                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800",
+                        ].join(" ")}
+                        aria-pressed={isSelected}
+                        aria-label={option.label}
+                        data-matchday-option-id={option.id}
+                      >
+                        {quickSelectLabel}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => scrollMatchdayChips("right")}
+                className="absolute top-1/2 right-0 z-10 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                aria-label="Scroll matchday filters right"
+              >
+                <ChevronRightIcon className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}
@@ -627,5 +693,25 @@ export default function MatchesPage() {
         </section>
       </section>
     </div>
+  );
+}
+
+function MatchesPageFromQuery() {
+  const searchParams = useSearchParams();
+  const statusFilterFromQuery = parseStatusFilter(searchParams.get("status"));
+
+  return (
+    <MatchesPageContent
+      key={statusFilterFromQuery}
+      initialStatusFilter={statusFilterFromQuery}
+    />
+  );
+}
+
+export default function MatchesPage() {
+  return (
+    <Suspense fallback={<MatchesPageContent initialStatusFilter="all" />}>
+      <MatchesPageFromQuery />
+    </Suspense>
   );
 }
