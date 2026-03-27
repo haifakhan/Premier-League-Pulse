@@ -51,34 +51,77 @@ export async function GET(request, context) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const posts = await prisma.post.findMany({
-      where: {
-        authorId: params.id,
-        isHidden: false,
-        isDeleted: false,
-        createdAt: {
-          gte: from,
-          lte: to,
+    const [threads, posts] = await Promise.all([
+      prisma.thread.findMany({
+        where: {
+          authorId: params.id,
+          isHidden: false,
+          isDeleted: false,
+          createdAt: {
+            gte: from,
+            lte: to,
+          },
         },
-      },
-      select: {
-        createdAt: true,
-      },
-      orderBy: {
-        createdAt: "asc",
-      },
-    });
+        select: {
+          createdAt: true,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      }),
+      prisma.post.findMany({
+        where: {
+          authorId: params.id,
+          isHidden: false,
+          isDeleted: false,
+          createdAt: {
+            gte: from,
+            lte: to,
+          },
+        },
+        select: {
+          createdAt: true,
+          kind: true,
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      }),
+    ]);
 
     const groupedByDate = {};
 
-    for (const post of posts) {
-      const date = post.createdAt.toISOString().slice(0, 10);
-      groupedByDate[date] = (groupedByDate[date] ?? 0) + 1;
+    for (const thread of threads) {
+      const date = thread.createdAt.toISOString().slice(0, 10);
+      groupedByDate[date] = groupedByDate[date] ?? {
+        threads: 0,
+        rootPosts: 0,
+        replies: 0,
+      };
+      groupedByDate[date].threads += 1;
     }
 
-    const activity = Object.entries(groupedByDate).map(([date, count]) => ({
+    for (const post of posts) {
+      const date = post.createdAt.toISOString().slice(0, 10);
+      groupedByDate[date] = groupedByDate[date] ?? {
+        threads: 0,
+        rootPosts: 0,
+        replies: 0,
+      };
+
+      if (post.kind === "ROOT") {
+        groupedByDate[date].rootPosts += 1;
+      } else {
+        groupedByDate[date].replies += 1;
+      }
+    }
+
+    const activity = Object.keys(groupedByDate).sort().map((date) => ({
       date,
-      count,
+      count: groupedByDate[date].rootPosts + groupedByDate[date].replies,
+      threads: groupedByDate[date].threads,
+      rootPosts: groupedByDate[date].rootPosts,
+      replies: groupedByDate[date].replies,
     }));
 
     return NextResponse.json({ activity }, { status: 200 });
