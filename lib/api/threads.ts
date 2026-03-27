@@ -60,6 +60,33 @@ type GetThreadResponse = {
   thread: ThreadDetail;
 };
 
+type ListThreadsResponse = {
+  threads: Array<{
+    id: string;
+    title: string;
+    forumType: string;
+    teamId: string | null;
+    matchId: string | null;
+    status: "OPEN" | "CLOSED" | string;
+    createdAt: string;
+    author: AuthorSummary;
+    tags?: string[];
+    postsCount?: number;
+  }>;
+};
+
+type CreateThreadResponse = {
+  thread: {
+    id: string;
+    title: string;
+    forumType: string;
+    teamId: string | null;
+    matchId: string | null;
+    status: "OPEN" | "CLOSED" | string;
+    createdAt: string;
+  };
+};
+
 type CreatePostResponse = {
   post: ThreadPost;
 };
@@ -85,6 +112,12 @@ type VoteResponse = {
     createdAt: string;
   };
 };
+
+type TagsResponse =
+  | {
+      tags?: Array<string | { name?: string }>;
+    }
+  | Array<string | { name?: string }>;
 
 function getApiErrorMessage(data: unknown, fallback: string) {
   if (
@@ -144,6 +177,123 @@ export async function getThread(threadId: string): Promise<ThreadDetail> {
   );
 
   return data.thread;
+}
+
+export async function listThreads(): Promise<ListThreadsResponse["threads"]> {
+  const data = await requestJson<ListThreadsResponse>(
+    "/api/threads",
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+    "Failed to fetch threads"
+  );
+
+  return data.threads;
+}
+
+export async function createThread(
+  token: string,
+  payload: {
+    title: string;
+    content: string;
+    teamId: string | null;
+    tags: string[];
+    forumType: "GENERAL" | "TEAM";
+  }
+): Promise<CreateThreadResponse["thread"]> {
+  const data = await requestJson<CreateThreadResponse>(
+    "/api/threads",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders(token),
+      },
+      body: JSON.stringify(payload),
+    },
+    "Failed to create thread"
+  );
+
+  return data.thread;
+}
+
+function normalizeTagEntry(entry: string | { name?: string } | null | undefined): string | null {
+  if (typeof entry === "string") {
+    const normalized = entry.trim().toLowerCase();
+    return normalized || null;
+  }
+
+  if (entry && typeof entry === "object" && typeof entry.name === "string") {
+    const normalized = entry.name.trim().toLowerCase();
+    return normalized || null;
+  }
+
+  return null;
+}
+
+async function getTagsFromThreads(): Promise<string[]> {
+  const threads = await listThreads();
+  const tagSet = new Set<string>();
+
+  for (const thread of threads) {
+    if (!Array.isArray(thread.tags)) {
+      continue;
+    }
+
+    for (const tag of thread.tags) {
+      const normalized = normalizeTagEntry(tag);
+      if (normalized) {
+        tagSet.add(normalized);
+      }
+    }
+  }
+
+  return [...tagSet].sort((left, right) => left.localeCompare(right));
+}
+
+async function getTagsFromTagsEndpoint(): Promise<string[]> {
+  const data = await requestJson<TagsResponse>(
+    "/api/tags",
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+    "Failed to fetch tags"
+  );
+
+  const rawTags = Array.isArray(data) ? data : Array.isArray(data.tags) ? data.tags : [];
+  const tagSet = new Set<string>();
+
+  for (const entry of rawTags) {
+    const normalized = normalizeTagEntry(entry);
+    if (normalized) {
+      tagSet.add(normalized);
+    }
+  }
+
+  return [...tagSet].sort((left, right) => left.localeCompare(right));
+}
+
+export async function getTagSuggestions(): Promise<string[]> {
+  try {
+    const threadTags = await getTagsFromThreads();
+    if (threadTags.length > 0) {
+      return threadTags;
+    }
+  } catch {
+    // Fall through to the optional tags endpoint.
+  }
+
+  try {
+    return await getTagsFromTagsEndpoint();
+  } catch (error) {
+    if (error instanceof ThreadApiError && error.status === 404) {
+      return [];
+    }
+
+    return [];
+  }
 }
 
 export async function createThreadReply(
