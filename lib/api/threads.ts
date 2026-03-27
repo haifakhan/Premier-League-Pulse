@@ -103,6 +103,23 @@ type PollResponse = {
   poll: ThreadPoll;
 };
 
+type CreatePollResponse = {
+  poll: {
+    id: string;
+    threadId: string;
+    question: string;
+    deadline: string;
+    createdAt?: string;
+    updatedAt?: string;
+    options: Array<{
+      id: string;
+      text: string;
+      position: number;
+      votes?: number;
+    }>;
+  };
+};
+
 type VoteResponse = {
   vote: {
     id: string;
@@ -370,6 +387,31 @@ export async function getThreadPoll(threadId: string): Promise<ThreadPoll> {
       cache: "no-store",
     },
     "Failed to fetch poll"
+  );
+
+  return data.poll;
+}
+
+export async function createThreadPoll(
+  threadId: string,
+  token: string,
+  payload: {
+    question: string;
+    deadline: string;
+    options: string[];
+  }
+): Promise<CreatePollResponse["poll"]> {
+  const data = await requestJson<CreatePollResponse>(
+    `/api/threads/${threadId}/poll`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders(token),
+      },
+      body: JSON.stringify(payload),
+    },
+    "Failed to create poll"
   );
 
   return data.poll;

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
+  createThreadPoll,
   createThreadReply,
   deletePost,
   getPostRevisions,
@@ -48,6 +49,41 @@ function mergePost(existing: ThreadPost, updated: ThreadPost) {
     ...updated,
     author: updated.author ?? existing.author,
     parentPostId: updated.parentPostId ?? existing.parentPostId,
+  };
+}
+
+function toDateTimeLocalValue(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const timezoneOffset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - timezoneOffset * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function normalizeCreatedPoll(
+  threadId: string,
+  poll: Awaited<ReturnType<typeof createThreadPoll>>
+): ThreadPoll {
+  const createdAt = poll.createdAt ?? new Date().toISOString();
+  const updatedAt = poll.updatedAt ?? createdAt;
+
+  return {
+    id: poll.id,
+    threadId: poll.threadId ?? threadId,
+    question: poll.question,
+    deadline: poll.deadline,
+    createdAt,
+    updatedAt,
+    totalVotes: 0,
+    options: poll.options.map((option) => ({
+      id: option.id,
+      text: option.text,
+      position: option.position,
+      votes: option.votes ?? 0,
+    })),
   };
 }
 
@@ -283,6 +319,19 @@ export default function ThreadPage() {
   const [hasVotedPollIds, setHasVotedPollIds] = useState<Record<string, boolean>>({});
   const [isSubmittingVote, setIsSubmittingVote] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
+  const [showCreatePollForm, setShowCreatePollForm] = useState(false);
+  const [pollForm, setPollForm] = useState({
+    question: "",
+    deadline: "",
+    options: ["", ""],
+  });
+  const [pollFormErrors, setPollFormErrors] = useState<{
+    question?: string;
+    deadline?: string;
+    options?: string;
+  }>({});
+  const [pollFormError, setPollFormError] = useState<string | null>(null);
+  const [isCreatingPoll, setIsCreatingPoll] = useState(false);
 
   useEffect(() => {
     if (!threadId) {
@@ -322,6 +371,14 @@ export default function ThreadPage() {
         setDeletingPostIds({});
         setSavingPostIds({});
         setRevisionStates({});
+        setShowCreatePollForm(false);
+        setPollForm({
+          question: "",
+          deadline: "",
+          options: ["", ""],
+        });
+        setPollFormErrors({});
+        setPollFormError(null);
       } catch (error) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : "Unable to load thread.");
@@ -436,6 +493,7 @@ export default function ThreadPage() {
   const replies = sortPosts(thread.replies);
   const canReply = Boolean(user && token && !isClosed);
   const hasVotedInPoll = poll ? Boolean(hasVotedPollIds[poll.id]) : false;
+  const canCreatePoll = Boolean(user && token && thread.author.id === user.id && !poll && !isClosed);
 
   async function reloadPoll() {
     if (!threadId) {
@@ -666,6 +724,70 @@ export default function ThreadPage() {
     }
   }
 
+  function resetPollForm() {
+    setPollForm({
+      question: "",
+      deadline: "",
+      options: ["", ""],
+    });
+    setPollFormErrors({});
+    setPollFormError(null);
+    setShowCreatePollForm(false);
+  }
+
+  function validatePollForm() {
+    const cleanedOptions = pollForm.options.map((option) => option.trim()).filter(Boolean);
+    const nextErrors: typeof pollFormErrors = {};
+
+    if (!pollForm.question.trim()) {
+      nextErrors.question = "Poll question is required.";
+    }
+
+    if (!pollForm.deadline) {
+      nextErrors.deadline = "A deadline is required.";
+    } else if (new Date(pollForm.deadline).getTime() <= Date.now()) {
+      nextErrors.deadline = "Deadline must be in the future.";
+    }
+
+    if (cleanedOptions.length < 2) {
+      nextErrors.options = "Enter at least 2 poll options.";
+    }
+
+    setPollFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  async function handleCreatePoll(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!token || !thread) {
+      setPollFormError("You must be logged in to create a poll.");
+      return;
+    }
+
+    if (!validatePollForm()) {
+      return;
+    }
+
+    setIsCreatingPoll(true);
+    setPollFormError(null);
+
+    try {
+      const createdPoll = await createThreadPoll(thread.id, token, {
+        question: pollForm.question.trim(),
+        deadline: new Date(pollForm.deadline).toISOString(),
+        options: pollForm.options.map((option) => option.trim()).filter(Boolean),
+      });
+
+      setPoll(normalizeCreatedPoll(thread.id, createdPoll));
+      resetPollForm();
+    } catch (error) {
+      setPollFormError(error instanceof Error ? error.message : "Unable to create poll.");
+    } finally {
+      setIsCreatingPoll(false);
+    }
+  }
+
   return (
     <section className="mx-auto max-w-4xl space-y-6">
       <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -708,6 +830,140 @@ export default function ThreadPage() {
           voteError={voteError}
           onVote={handleVote}
         />
+      ) : canCreatePoll ? (
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          {!showCreatePollForm ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Create Poll</h2>
+                <p className="text-sm text-slate-600">Add one poll to this thread for readers to vote on.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreatePollForm(true)}
+                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+              >
+                Create Poll
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={(event) => void handleCreatePoll(event)} className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Create Poll</h2>
+                <p className="text-sm text-slate-600">Polls need a question, at least 2 options, and a deadline.</p>
+              </div>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-700">Question</span>
+                <input
+                  type="text"
+                  value={pollForm.question}
+                  onChange={(event) => {
+                    setPollForm((current) => ({ ...current, question: event.target.value }));
+                    setPollFormError(null);
+                    setPollFormErrors((current) => ({ ...current, question: undefined }));
+                  }}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+                  placeholder="What should the community vote on?"
+                  required
+                />
+                {pollFormErrors.question ? <p className="text-sm text-red-600">{pollFormErrors.question}</p> : null}
+              </label>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm font-medium text-slate-700">Options</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPollForm((current) => ({
+                        ...current,
+                        options: [...current.options, ""],
+                      }))
+                    }
+                    className="rounded-full border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900"
+                  >
+                    Add option
+                  </button>
+                </div>
+
+                {pollForm.options.map((option, index) => (
+                  <div key={index} className="flex gap-3">
+                    <input
+                      type="text"
+                      value={option}
+                      onChange={(event) => {
+                        setPollForm((current) => ({
+                          ...current,
+                          options: current.options.map((entry, entryIndex) =>
+                            entryIndex === index ? event.target.value : entry
+                          ),
+                        }));
+                        setPollFormError(null);
+                        setPollFormErrors((current) => ({ ...current, options: undefined }));
+                      }}
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+                      placeholder={`Option ${index + 1}`}
+                      required={index < 2}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPollForm((current) => ({
+                          ...current,
+                          options: current.options.filter((_, entryIndex) => entryIndex !== index),
+                        }))
+                      }
+                      disabled={pollForm.options.length <= 2}
+                      className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+
+                {pollFormErrors.options ? <p className="text-sm text-red-600">{pollFormErrors.options}</p> : null}
+              </div>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-slate-700">Deadline</span>
+                <input
+                  type="datetime-local"
+                  value={pollForm.deadline}
+                  min={toDateTimeLocalValue(new Date().toISOString())}
+                  onChange={(event) => {
+                    setPollForm((current) => ({ ...current, deadline: event.target.value }));
+                    setPollFormError(null);
+                    setPollFormErrors((current) => ({ ...current, deadline: undefined }));
+                  }}
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
+                  required
+                />
+                {pollFormErrors.deadline ? <p className="text-sm text-red-600">{pollFormErrors.deadline}</p> : null}
+              </label>
+
+              {pollFormError ? <p className="text-sm text-red-600">{pollFormError}</p> : null}
+
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={isCreatingPoll}
+                  className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {isCreatingPoll ? "Creating..." : "Create Poll"}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetPollForm}
+                  disabled={isCreatingPoll}
+                  className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
       ) : null}
 
       <section className="space-y-4">
