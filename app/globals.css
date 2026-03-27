@@ -4,11 +4,23 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --color-sky-100: #f3e8ff;
+  --color-sky-200: #e9d5ff;
+  --color-sky-300: #d8b4fe;
+  --color-sky-500: #a855f7;
+  --color-sky-600: #9333ea;
+  --color-sky-700: #7e22ce;
 }
 
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  --color-sky-100: #fce7f3;
+  --color-sky-200: #fbcfe8;
+  --color-sky-300: #f9a8d4;
+  --color-sky-500: #ec4899;
+  --color-sky-600: #db2777;
+  --color-sky-700: #be185d;
 }
 
 @theme inline {
@@ -47,7 +59,7 @@ body {
 }
 
 .dark header .text-sky-700 {
-  color: #38bdf8;
+  color: var(--color-sky-700);
 }
 
 .dark header .hover\:bg-slate-100:hover {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getMatchesByStatus, type Match } from "@/lib/api/sports";
 
@@ -13,17 +14,21 @@ interface MatchCardProps {
   isCompleted: boolean;
 }
 
-type MatchdayKind = "all" | "matchday" | "stage";
-
-interface Matchday {
+interface MatchdayOption {
   id: string;
   label: string;
-  kind: MatchdayKind;
   matchday: number | null;
-  stage: string | null;
 }
 
+type StatusFilter = "all" | "upcoming" | "recent";
+
 const ALL_MATCHDAY_ID = "all";
+
+const STATUS_FILTER_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
+  { id: "all", label: "All Matches" },
+  { id: "upcoming", label: "Upcoming" },
+  { id: "recent", label: "Recently Completed" },
+];
 
 function getShortName(name: string): string {
   const parts = name
@@ -51,23 +56,33 @@ function formatMatchTime(utcDate: string): string {
   }).format(new Date(utcDate));
 }
 
-function formatStageLabel(stage: string): string {
-  return stage
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+function formatDateRange(startDate: Date, endDate: Date): string {
+  const startTime = startDate.getTime();
+  const endTime = endDate.getTime();
+
+  if (startTime === endTime) {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(startDate);
+  }
+
+  const startLabel = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(startDate);
+
+  const endLabel = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(endDate);
+
+  return `${startLabel} - ${endLabel}`;
 }
 
-function buildStageId(stage: string): string {
-  return `stage-${stage
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")}`;
-}
-
-function buildMatchdayOptions(matches: Match[]): Matchday[] {
+function buildMatchdayOptions(matches: Match[]): MatchdayOption[] {
   const matchdays = Array.from(
     new Set(
       matches
@@ -79,207 +94,42 @@ function buildMatchdayOptions(matches: Match[]): Matchday[] {
     .map((matchday) => ({
       id: `matchday-${matchday}`,
       label: `Matchday ${matchday}`,
-      kind: "matchday" as const,
       matchday,
-      stage: null,
-    }));
-
-  const stageLookup = new Map<string, string>();
-  matches.forEach((match) => {
-    if (match.matchday !== null) return;
-    if (!match.stage || !match.stage.trim()) return;
-
-    const stage = match.stage.trim();
-    const normalizedKey = stage.toLowerCase();
-    if (!stageLookup.has(normalizedKey)) {
-      stageLookup.set(normalizedKey, stage);
-    }
-  });
-
-  const stages = Array.from(stageLookup.values())
-    .sort((a, b) => a.localeCompare(b))
-    .map((stage) => ({
-      id: buildStageId(stage),
-      label: formatStageLabel(stage),
-      kind: "stage" as const,
-      matchday: null,
-      stage,
     }));
 
   return [
     {
       id: ALL_MATCHDAY_ID,
       label: "All",
-      kind: "all",
       matchday: null,
-      stage: null,
     },
     ...matchdays,
-    ...stages,
   ];
 }
 
-function filterMatchesByMatchday(matches: Match[], selectedMatchday: Matchday): Match[] {
-  if (selectedMatchday.kind === "all") return matches;
+function filterMatchesByMatchday(matches: Match[], selectedMatchday: MatchdayOption): Match[] {
+  if (selectedMatchday.matchday === null) return matches;
+  return matches.filter((match) => match.matchday === selectedMatchday.matchday);
+}
 
-  if (selectedMatchday.kind === "matchday") {
-    return matches.filter((match) => match.matchday === selectedMatchday.matchday);
+function getDateRangeLabel(matches: Match[], selectedMatchday: MatchdayOption): string {
+  const scopedMatches =
+    selectedMatchday.matchday === null
+      ? matches
+      : matches.filter((match) => match.matchday === selectedMatchday.matchday);
+
+  const timestamps = scopedMatches
+    .map((match) => new Date(match.utcDate).getTime())
+    .filter((timestamp) => Number.isFinite(timestamp))
+    .sort((a, b) => a - b);
+
+  if (timestamps.length === 0) {
+    return selectedMatchday.matchday === null
+      ? "No fixtures available"
+      : "No fixtures in this matchday";
   }
 
-  const selectedStage = selectedMatchday.stage?.trim().toLowerCase();
-  if (!selectedStage) return matches;
-
-  return matches.filter((match) => {
-    if (match.matchday !== null) return false;
-    if (!match.stage || !match.stage.trim()) return false;
-    return match.stage.trim().toLowerCase() === selectedStage;
-  });
-}
-
-function TeamLogo({ src, teamName }: TeamLogoProps) {
-  const [hasError, setHasError] = useState<boolean>(false);
-
-  if (hasError || !src) {
-    return (
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
-        {getShortName(teamName)}
-      </div>
-    );
-  }
-
-  return (
-    // eslint-disable-next-line @next/next/no-img-element -- crest URLs come from upstream and are not preconfigured domains.
-    <img
-      src={src}
-      alt={`${teamName} crest`}
-      onError={() => setHasError(true)}
-      className="h-12 w-12 rounded-full border border-slate-300 bg-white object-contain p-1 dark:border-slate-700 dark:bg-slate-900"
-      loading="lazy"
-    />
-  );
-}
-
-function MatchCard({ match, isCompleted }: MatchCardProps) {
-  const homeScore = match.score?.fullTime?.home;
-  const awayScore = match.score?.fullTime?.away;
-
-  return (
-    <article
-      className={[
-        "group rounded-2xl border p-5 shadow-lg transition duration-300 hover:scale-[1.02] hover:border-fuchsia-500/70",
-        isCompleted
-          ? "border-slate-200 bg-slate-100/90 dark:border-slate-800 dark:bg-slate-950"
-          : "border-slate-200 bg-white/90 dark:border-slate-700 dark:bg-slate-900/70",
-      ].join(" ")}
-    >
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase dark:text-slate-400">
-            {isCompleted ? "Recent Result" : "Upcoming Match"}
-          </p>
-          <p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">
-            {formatMatchDate(match.utcDate)}
-          </p>
-        </div>
-        <div className="text-right">
-          <p
-            className={[
-              "text-xl font-extrabold",
-              isCompleted ? "text-slate-800 dark:text-slate-50" : "text-[#38003c] dark:text-fuchsia-300",
-            ].join(" ")}
-          >
-            {isCompleted ? "FT" : formatMatchTime(match.utcDate)}
-          </p>
-        </div>
-      </header>
-
-      {isCompleted && (
-        <div className="mb-4 rounded-xl border border-slate-200 bg-white px-3 py-4 text-center dark:border-slate-700 dark:bg-slate-900">
-          <p className="text-4xl font-black tracking-tight text-slate-900 dark:text-slate-50">
-            {homeScore ?? "-"} - {awayScore ?? "-"}
-          </p>
-          <p className="mt-1 text-xs font-semibold tracking-[0.15em] text-slate-500 uppercase dark:text-slate-400">
-            Final Score
-          </p>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <TeamLogo src={match.homeTeam.crest} teamName={match.homeTeam.name} />
-            <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {match.homeTeam.name}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="h-px flex-1 bg-slate-300 dark:bg-slate-700" />
-          <span className="text-xs font-extrabold tracking-[0.2em] text-[#38003c] dark:text-fuchsia-300">
-            VS
-          </span>
-          <div className="h-px flex-1 bg-slate-300 dark:bg-slate-700" />
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <TeamLogo src={match.awayTeam.crest} teamName={match.awayTeam.name} />
-            <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
-              {match.awayTeam.name}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <footer className="mt-5 border-t border-slate-200 pt-3 dark:border-slate-800">
-        <p className="truncate text-xs font-medium tracking-wide text-slate-600 uppercase dark:text-slate-400">
-          Venue: {match.venue || "Venue TBD"}
-        </p>
-      </footer>
-    </article>
-  );
-}
-
-function MatchGridSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div
-          key={`skeleton-${index}`}
-          className="h-60 animate-pulse rounded-2xl border border-slate-200 bg-slate-200/70 dark:border-slate-800 dark:bg-slate-900/70"
-        />
-      ))}
-    </div>
-  );
-}
-
-function MatchdayPillsSkeleton() {
-  return (
-    <div className="relative">
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
-      <div className="scrollbar-hide overflow-x-auto">
-        <div className="inline-flex min-w-full gap-2 whitespace-nowrap py-1">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div
-              key={`matchday-pill-skeleton-${index}`}
-              className="h-9 w-24 animate-pulse rounded-full border border-slate-200 bg-slate-200/80 dark:border-slate-700 dark:bg-slate-800"
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div className="mb-5 border-l-4 border-fuchsia-500 pl-4">
-      <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 sm:text-2xl">{title}</h2>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{subtitle}</p>
-    </div>
-  );
+  return formatDateRange(new Date(timestamps[0]), new Date(timestamps[timestamps.length - 1]));
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -296,28 +146,226 @@ function sortByUtcDate(matches: Match[], order: "asc" | "desc"): Match[] {
   });
 }
 
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className={className}>
+      <rect x="3.5" y="4.5" width="17" height="16" rx="2.5" />
+      <path d="M8 2.75v3.5M16 2.75v3.5M3.5 9.5h17" />
+    </svg>
+  );
+}
+
+function FilterIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className={className}>
+      <path d="M4 6h16M7 12h10M10 18h4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="m15 5-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <path d="m9 5 7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MapPinIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className={className}>
+      <path
+        d="M12 21c-2.7-3.3-6-6.8-6-10.6A6 6 0 0 1 18 10.4C18 14.2 14.7 17.7 12 21Z"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10.5" r="2.2" />
+    </svg>
+  );
+}
+
+function TeamLogo({ src, teamName }: TeamLogoProps) {
+  const [hasError, setHasError] = useState<boolean>(false);
+
+  if (hasError || !src) {
+    return (
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+        {getShortName(teamName)}
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- crest URLs come from upstream and are not preconfigured domains.
+    <img
+      src={src}
+      alt={`${teamName} crest`}
+      onError={() => setHasError(true)}
+      className="h-10 w-10 rounded-full border border-slate-300 bg-white object-contain p-1 dark:border-slate-700 dark:bg-slate-900"
+      loading="lazy"
+    />
+  );
+}
+
+function MatchCard({ match, isCompleted }: MatchCardProps) {
+  const homeScore = match.score?.fullTime?.home;
+  const awayScore = match.score?.fullTime?.away;
+  const resultLabel =
+    isCompleted && homeScore !== null && awayScore !== null ? `${homeScore} - ${awayScore}` : "vs";
+  const statusLabel = isCompleted ? "FT" : "Upcoming";
+
+  return (
+    <Link
+      href={`/matches/${match.id}`}
+      className="group block overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:border-sky-500/70 hover:shadow-lg focus-visible:border-sky-500/70 focus-visible:shadow-lg focus-visible:outline-none dark:border-slate-700 dark:bg-slate-900 dark:hover:border-sky-500/70 dark:focus-visible:border-sky-500/70"
+      aria-label={`${match.homeTeam.name} vs ${match.awayTeam.name}`}
+    >
+      <article className="flex flex-col md:grid md:grid-cols-[180px_minmax(0,1fr)_190px]">
+        <div className="border-b border-slate-200 px-4 py-4 md:border-r md:border-b-0 dark:border-slate-700">
+          <p className="text-xs font-semibold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
+            {formatMatchDate(match.utcDate)}
+          </p>
+          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+            {formatMatchTime(match.utcDate)}
+          </p>
+          <span
+            className={[
+              "mt-3 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold tracking-wide uppercase",
+              isCompleted
+                ? "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                : "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-600 dark:bg-sky-700/20 dark:text-sky-300",
+            ].join(" ")}
+          >
+            {statusLabel}
+          </span>
+        </div>
+
+        <div className="space-y-3 px-4 py-4 md:px-5">
+          <div className="flex items-center gap-3">
+            <TeamLogo src={match.homeTeam.crest} teamName={match.homeTeam.name} />
+            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {match.homeTeam.name}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            <span
+              className={[
+                "min-w-16 text-center text-sm font-extrabold tracking-[0.16em] uppercase",
+                isCompleted ? "text-slate-900 dark:text-slate-100" : "text-sky-700 dark:text-sky-300",
+              ].join(" ")}
+            >
+              {resultLabel}
+            </span>
+            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <TeamLogo src={match.awayTeam.crest} teamName={match.awayTeam.name} />
+            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {match.awayTeam.name}
+            </p>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 md:border-t-0 md:border-l dark:border-slate-700 dark:bg-slate-800/50">
+          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-300">
+            <MapPinIcon className="h-4 w-4 text-sky-600 dark:text-sky-300" />
+            <p className="text-xs font-semibold tracking-[0.12em] uppercase">Venue</p>
+          </div>
+          <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+            {match.venue || "Venue TBD"}
+          </p>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
+function MatchListSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div
+          key={`match-row-skeleton-${index}`}
+          className="h-40 animate-pulse rounded-2xl border border-slate-200 bg-slate-100/80 dark:border-slate-700 dark:bg-slate-800/70"
+        />
+      ))}
+    </div>
+  );
+}
+
+function MatchdaySelectorSkeleton() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+      <div className="mb-4 h-18 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {Array.from({ length: 10 }).map((_, index) => (
+          <div
+            key={`matchday-selector-skeleton-${index}`}
+            className="h-9 w-16 shrink-0 animate-pulse rounded-full border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ statusFilter }: { statusFilter: StatusFilter }) {
+  const emptyText =
+    statusFilter === "all"
+      ? "No matches found for the selected matchday."
+      : statusFilter === "upcoming"
+        ? "No upcoming matches found for the selected matchday."
+        : "No recently completed matches found for the selected matchday.";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-700 dark:bg-slate-900">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+        <CalendarIcon className="h-6 w-6" />
+      </div>
+      <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{emptyText}</p>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Try another status or matchday.</p>
+    </div>
+  );
+}
+
 export default function MatchesPage() {
   const [allUpcomingMatches, setAllUpcomingMatches] = useState<Match[]>([]);
   const [allRecentMatches, setAllRecentMatches] = useState<Match[]>([]);
   const [selectedMatchdayId, setSelectedMatchdayId] = useState<string>(ALL_MATCHDAY_ID);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const matchdayOptions = useMemo(
-    () => buildMatchdayOptions([...allUpcomingMatches, ...allRecentMatches]),
+  const allMatches = useMemo(
+    () => [...allUpcomingMatches, ...allRecentMatches],
     [allUpcomingMatches, allRecentMatches]
   );
+
+  const matchdayOptions = useMemo(() => buildMatchdayOptions(allMatches), [allMatches]);
 
   const selectedMatchday = useMemo(
     () =>
       matchdayOptions.find((option) => option.id === selectedMatchdayId) ?? {
         id: ALL_MATCHDAY_ID,
         label: "All",
-        kind: "all" as const,
         matchday: null,
-        stage: null,
       },
     [matchdayOptions, selectedMatchdayId]
+  );
+
+  const selectedMatchdayIndex = useMemo(
+    () => matchdayOptions.findIndex((option) => option.id === selectedMatchday.id),
+    [matchdayOptions, selectedMatchday.id]
   );
 
   const upcomingMatches = useMemo(
@@ -329,6 +377,26 @@ export default function MatchesPage() {
     () => filterMatchesByMatchday(allRecentMatches, selectedMatchday),
     [allRecentMatches, selectedMatchday]
   );
+
+  const dateRangeLabel = useMemo(
+    () => getDateRangeLabel(allMatches, selectedMatchday),
+    [allMatches, selectedMatchday]
+  );
+
+  const visibleMatches = useMemo(() => {
+    if (statusFilter === "upcoming") {
+      return upcomingMatches.map((match) => ({ match, isCompleted: false }));
+    }
+
+    if (statusFilter === "recent") {
+      return recentMatches.map((match) => ({ match, isCompleted: true }));
+    }
+
+    return [
+      ...upcomingMatches.map((match) => ({ match, isCompleted: false })),
+      ...recentMatches.map((match) => ({ match, isCompleted: true })),
+    ];
+  }, [statusFilter, upcomingMatches, recentMatches]);
 
   useEffect(() => {
     let isMounted = true;
@@ -371,41 +439,82 @@ export default function MatchesPage() {
     };
   }, []);
 
+  function selectAdjacentMatchday(direction: "prev" | "next") {
+    if (selectedMatchdayIndex < 0) return;
+
+    const nextIndex = direction === "prev" ? selectedMatchdayIndex - 1 : selectedMatchdayIndex + 1;
+    const nextMatchday = matchdayOptions[nextIndex];
+    if (!nextMatchday) return;
+
+    setSelectedMatchdayId(nextMatchday.id);
+  }
+
   return (
-    <section className="space-y-10 rounded-2xl bg-gradient-to-b from-slate-100 via-white to-slate-100 p-4 sm:p-6 lg:p-8 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      <header className="space-y-2">
-        <p className="text-sm font-semibold tracking-[0.18em] text-[#38003c] uppercase dark:text-fuchsia-300">
-          Premier League
-        </p>
-        <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-slate-50 sm:text-4xl">
-          Matches
-        </h1>
-        <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-300 sm:text-base">
-          Follow upcoming fixtures and the latest full-time results across the league.
-        </p>
-      </header>
-
-      {errorMessage && (
-        <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/50 dark:bg-red-900/20 dark:text-red-200">
-          {errorMessage}
+    <div className="space-y-8">
+      <section className="relative left-1/2 right-1/2 -mx-[50vw] w-screen border-y border-slate-200 bg-gradient-to-r from-slate-100 via-white to-slate-100 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="flex items-start gap-4">
+            <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-600 dark:bg-sky-700/20 dark:text-sky-300">
+              <CalendarIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl">
+                Matches List
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300 sm:text-base">
+                Explore all matchdays, switch between upcoming and recently completed fixtures, and open any match
+                for details.
+              </p>
+            </div>
+          </div>
         </div>
-      )}
+      </section>
 
-      <section>
-        <SectionHeader
-          title="Browse Matchdays"
-          subtitle="Use matchday or stage pills to filter both upcoming matches and recent results."
-        />
+      <section className="mx-auto w-full max-w-5xl space-y-5">
+        {errorMessage && (
+          <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/50 dark:bg-red-900/20 dark:text-red-200">
+            {errorMessage}
+          </div>
+        )}
+
         {isLoading ? (
-          <MatchdayPillsSkeleton />
+          <MatchdaySelectorSkeleton />
         ) : (
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-slate-100 via-slate-100/90 to-transparent dark:from-slate-950 dark:via-slate-950/90" />
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-700 dark:bg-slate-800/50">
+              <button
+                type="button"
+                onClick={() => selectAdjacentMatchday("prev")}
+                disabled={selectedMatchdayIndex <= 0}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                aria-label="Previous matchday"
+              >
+                <ChevronLeftIcon className="h-4 w-4" />
+              </button>
+
+              <div className="min-w-0 flex-1 text-center">
+                <p className="text-xs font-semibold tracking-[0.12em] text-slate-500 uppercase dark:text-slate-400">
+                  {selectedMatchday.label}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-slate-100">{dateRangeLabel}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => selectAdjacentMatchday("next")}
+                disabled={selectedMatchdayIndex === -1 || selectedMatchdayIndex >= matchdayOptions.length - 1}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                aria-label="Next matchday"
+              >
+                <ChevronRightIcon className="h-4 w-4" />
+              </button>
+            </div>
+
             <div className="scrollbar-hide overflow-x-auto">
-              <div className="inline-flex min-w-full gap-2 whitespace-nowrap py-1">
+              <div className="inline-flex min-w-full gap-2 whitespace-nowrap pb-1">
                 {matchdayOptions.map((option) => {
                   const isSelected = option.id === selectedMatchday.id;
+                  const quickSelectLabel = option.matchday === null ? "All" : String(option.matchday);
 
                   return (
                     <button
@@ -413,14 +522,15 @@ export default function MatchesPage() {
                       type="button"
                       onClick={() => setSelectedMatchdayId(option.id)}
                       className={[
-                        "rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400/70",
+                        "rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-500",
                         isSelected
-                          ? "border-[#38003c] bg-[#38003c] text-white dark:border-fuchsia-500 dark:bg-fuchsia-500 dark:text-slate-950"
+                          ? "border-sky-600 bg-sky-600 text-white dark:border-sky-500 dark:bg-sky-500 dark:text-slate-950"
                           : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800",
                       ].join(" ")}
                       aria-pressed={isSelected}
+                      aria-label={option.label}
                     >
-                      {option.label}
+                      {quickSelectLabel}
                     </button>
                   );
                 })}
@@ -428,47 +538,48 @@ export default function MatchesPage() {
             </div>
           </div>
         )}
-      </section>
 
-      <section>
-        <SectionHeader
-          title="Upcoming Matches"
-          subtitle="Kickoff schedule with venue details and club matchups."
-        />
-        {isLoading ? (
-          <MatchGridSkeleton />
-        ) : upcomingMatches.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 transition-opacity duration-200 md:grid-cols-2 lg:grid-cols-3">
-            {upcomingMatches.map((match) => (
-              <MatchCard key={match.id} match={match} isCompleted={false} />
-            ))}
-          </div>
-        ) : (
-          <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-            No upcoming matches available right now.
-          </p>
-        )}
-      </section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold tracking-[0.1em] text-slate-600 uppercase dark:bg-slate-800 dark:text-slate-300">
+              <FilterIcon className="h-3.5 w-3.5" />
+              Status Filter
+            </span>
+            {STATUS_FILTER_OPTIONS.map((option) => {
+              const isSelected = statusFilter === option.id;
 
-      <section>
-        <SectionHeader
-          title="Recent Results"
-          subtitle="Latest completed matches and final scores."
-        />
-        {isLoading ? (
-          <MatchGridSkeleton />
-        ) : recentMatches.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 transition-opacity duration-200 md:grid-cols-2 lg:grid-cols-3">
-            {recentMatches.map((match) => (
-              <MatchCard key={match.id} match={match} isCompleted />
-            ))}
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setStatusFilter(option.id)}
+                  className={[
+                    "rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-500",
+                    isSelected
+                      ? "border-sky-600 bg-sky-600 text-white dark:border-sky-500 dark:bg-sky-500 dark:text-slate-950"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800",
+                  ].join(" ")}
+                  aria-pressed={isSelected}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-            No recent results available right now.
-          </p>
-        )}
+
+          {isLoading ? (
+            <MatchListSkeleton />
+          ) : visibleMatches.length > 0 ? (
+            <div className="space-y-3">
+              {visibleMatches.map(({ match, isCompleted }) => (
+                <MatchCard key={match.id} match={match} isCompleted={isCompleted} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState statusFilter={statusFilter} />
+          )}
+        </section>
       </section>
-    </section>
+    </div>
   );
 }
