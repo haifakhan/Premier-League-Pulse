@@ -346,20 +346,6 @@ function MatchCard({ match, isCompleted }: MatchCardProps) {
         </div>
       </Link>
 
-      <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
-        <Link
-          href={`/matches/${match.id}`}
-          className="text-xs font-semibold text-slate-700 transition hover:text-sky-700 dark:text-slate-200 dark:hover:text-sky-300"
-        >
-          Match Details
-        </Link>
-        <Link
-          href={`/matches/${match.id}/discussion`}
-          className="rounded-full bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
-        >
-          Discuss
-        </Link>
-      </div>
     </article>
   );
 }
