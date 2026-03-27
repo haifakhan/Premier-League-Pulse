@@ -8,21 +8,19 @@ import {
   followUser,
   getMyFollowers,
   getMyFollowing,
+  getPublicUserActivity,
   getPublicUserProfile,
+  type PublicUserActivityPoint,
   removeFollower,
   type PublicUserPost,
   type PublicUserProfile,
-  type PublicUserThread,
   type UserListItem,
   unfollowUser,
 } from "@/lib/api/users";
 import { useAuth } from "@/lib/context/auth";
 
-type ActivityPoint = {
-  date: string;
+type ActivityPoint = PublicUserActivityPoint & {
   label: string;
-  threads: number;
-  posts: number;
 };
 
 function formatTimestamp(value: string): string {
@@ -39,56 +37,17 @@ function formatDayLabel(value: string): string {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
-function buildActivitySeries(threads: PublicUserThread[], posts: PublicUserPost[]): ActivityPoint[] {
-  const threadDates = threads.map((thread) => thread.createdAt);
-  const postDates = posts.map((post) => post.createdAt);
-  const allDates = [...threadDates, ...postDates]
-    .map((value) => new Date(value))
-    .filter((value) => Number.isFinite(value.getTime()))
-    .sort((left, right) => left.getTime() - right.getTime());
+function getLastThirtyDayRange() {
+  const to = new Date();
+  to.setUTCHours(0, 0, 0, 0);
 
-  if (allDates.length === 0) {
-    return [];
-  }
+  const from = new Date(to);
+  from.setUTCDate(to.getUTCDate() - 29);
 
-  const latest = allDates[allDates.length - 1];
-  const windowEnd = new Date(Date.UTC(latest.getUTCFullYear(), latest.getUTCMonth(), latest.getUTCDate()));
-  const windowStart = new Date(windowEnd);
-  windowStart.setUTCDate(windowEnd.getUTCDate() - 29);
-
-  const threadCounts = new Map<string, number>();
-  const postCounts = new Map<string, number>();
-
-  for (const thread of threads) {
-    const date = thread.createdAt.slice(0, 10);
-    if (date >= windowStart.toISOString().slice(0, 10) && date <= windowEnd.toISOString().slice(0, 10)) {
-      threadCounts.set(date, (threadCounts.get(date) ?? 0) + 1);
-    }
-  }
-
-  for (const post of posts) {
-    const date = post.createdAt.slice(0, 10);
-    if (date >= windowStart.toISOString().slice(0, 10) && date <= windowEnd.toISOString().slice(0, 10)) {
-      postCounts.set(date, (postCounts.get(date) ?? 0) + 1);
-    }
-  }
-
-  const points: ActivityPoint[] = [];
-
-  for (let offset = 0; offset < 30; offset += 1) {
-    const current = new Date(windowStart);
-    current.setUTCDate(windowStart.getUTCDate() + offset);
-    const date = current.toISOString().slice(0, 10);
-
-    points.push({
-      date,
-      label: formatDayLabel(date),
-      threads: threadCounts.get(date) ?? 0,
-      posts: postCounts.get(date) ?? 0,
-    });
-  }
-
-  return points;
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
 }
 
 function getInitial(username: string): string {
@@ -102,6 +61,10 @@ function truncateContent(content: string, maxLength = 180): string {
   }
 
   return `${trimmed.slice(0, maxLength).trimEnd()}...`;
+}
+
+function getPostKindLabel(post: PublicUserPost): string {
+  return post.kind === "ROOT" ? "Post" : "Reply";
 }
 
 function sortByFollowTime(items: UserListItem[]): UserListItem[] {
@@ -124,8 +87,11 @@ function ActivityChart({ data }: { data: ActivityPoint[] }) {
   const plotWidth = svgWidth - paddingLeft - paddingRight;
   const plotHeight = svgHeight - paddingTop - paddingBottom;
   const groupWidth = plotWidth / data.length;
-  const maxValue = Math.max(1, ...data.flatMap((point) => [point.threads, point.posts]));
-  const barWidth = Math.max(4, Math.min(9, groupWidth / 3));
+  const maxValue = Math.max(
+    1,
+    ...data.flatMap((point) => [point.threads, point.rootPosts, point.replies])
+  );
+  const barWidth = Math.max(3, Math.min(8, groupWidth / 4));
 
   return (
     <div className="space-y-3">
@@ -135,8 +101,12 @@ function ActivityChart({ data }: { data: ActivityPoint[] }) {
           Threads
         </span>
         <span className="inline-flex items-center gap-2">
+          <span className="h-3 w-3 rounded-sm bg-emerald-500" aria-hidden="true" />
+          Posts
+        </span>
+        <span className="inline-flex items-center gap-2">
           <span className="h-3 w-3 rounded-sm bg-slate-500" aria-hidden="true" />
-          Posts & Replies
+          Replies
         </span>
       </div>
 
@@ -153,13 +123,14 @@ function ActivityChart({ data }: { data: ActivityPoint[] }) {
         {data.map((point, index) => {
           const groupX = paddingLeft + index * groupWidth + groupWidth / 2;
           const threadHeight = (point.threads / maxValue) * plotHeight;
-          const postHeight = (point.posts / maxValue) * plotHeight;
+          const rootPostHeight = (point.rootPosts / maxValue) * plotHeight;
+          const replyHeight = (point.replies / maxValue) * plotHeight;
           const labelEvery = data.length > 10 ? 3 : 1;
 
           return (
             <g key={point.date}>
               <rect
-                x={groupX - barWidth - 1}
+                x={groupX - barWidth * 1.5 - 2}
                 y={paddingTop + plotHeight - threadHeight}
                 width={barWidth}
                 height={threadHeight}
@@ -167,10 +138,18 @@ function ActivityChart({ data }: { data: ActivityPoint[] }) {
                 fill="#0ea5e9"
               />
               <rect
-                x={groupX + 1}
-                y={paddingTop + plotHeight - postHeight}
+                x={groupX - barWidth / 2}
+                y={paddingTop + plotHeight - rootPostHeight}
                 width={barWidth}
-                height={postHeight}
+                height={rootPostHeight}
+                rx="2"
+                fill="#10b981"
+              />
+              <rect
+                x={groupX + barWidth / 2 + 2}
+                y={paddingTop + plotHeight - replyHeight}
+                width={barWidth}
+                height={replyHeight}
                 rx="2"
                 fill="#64748b"
               />
@@ -223,6 +202,7 @@ export default function UserProfilePage() {
 
   const [profile, setProfile] = useState<PublicUserProfile | null>(null);
   const [teams, setTeams] = useState<TeamOption[]>([]);
+  const [activity, setActivity] = useState<ActivityPoint[]>([]);
   const [followers, setFollowers] = useState<UserListItem[]>([]);
   const [following, setFollowing] = useState<UserListItem[]>([]);
   const [isFollowingProfile, setIsFollowingProfile] = useState(false);
@@ -248,7 +228,12 @@ export default function UserProfilePage() {
       setProfileError(null);
 
       try {
-        const [nextProfile, nextTeams] = await Promise.all([getPublicUserProfile(userId), getTeams()]);
+        const { from, to } = getLastThirtyDayRange();
+        const [nextProfile, nextTeams, nextActivity] = await Promise.all([
+          getPublicUserProfile(userId),
+          getTeams(),
+          getPublicUserActivity(userId, from, to),
+        ]);
 
         if (cancelled) {
           return;
@@ -256,10 +241,12 @@ export default function UserProfilePage() {
 
         setProfile(nextProfile);
         setTeams(nextTeams);
+        setActivity(nextActivity.map((point) => ({ ...point, label: formatDayLabel(point.date) })));
       } catch (error) {
         if (!cancelled) {
           setProfile(null);
           setTeams([]);
+          setActivity([]);
           setProfileError(error instanceof Error ? error.message : "Unable to load profile.");
         }
       } finally {
@@ -352,13 +339,15 @@ export default function UserProfilePage() {
     return teams.find((team) => team.id === profile.favoriteTeamId)?.name ?? `Team ${profile.favoriteTeamId}`;
   }, [profile?.favoriteTeamId, teams]);
 
-  const activityData = useMemo(() => {
-    if (!profile) {
-      return [];
-    }
+  const authoredPosts = useMemo(
+    () => profile?.posts.filter((post) => post.kind === "ROOT") ?? [],
+    [profile?.posts]
+  );
 
-    return buildActivitySeries(profile.threads, profile.posts);
-  }, [profile]);
+  const authoredReplies = useMemo(
+    () => profile?.posts.filter((post) => post.kind === "REPLY") ?? [],
+    [profile?.posts]
+  );
 
   async function handleFollowToggle() {
     if (!token || !profile || isOwnProfile) {
@@ -501,11 +490,13 @@ export default function UserProfilePage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Activity</h2>
-            <p className="text-sm text-slate-600">Daily thread and post/reply activity for the last 30 days.</p>
+            <p className="text-sm text-slate-600">
+              Daily thread, post, and reply activity for the last 30 days.
+            </p>
           </div>
         </div>
         <div className="mt-6">
-          <ActivityChart data={activityData} />
+          <ActivityChart data={activity} />
         </div>
       </section>
 
@@ -542,12 +533,61 @@ export default function UserProfilePage() {
 
           <div className="mt-4 space-y-3">
             {profile.posts.length ? (
-              profile.posts.map((post) => (
-                <article key={post.id} className="rounded-2xl border border-slate-200 px-4 py-3">
-                  <p className="whitespace-pre-wrap text-sm text-slate-800">{truncateContent(post.content)}</p>
-                  <p className="mt-2 text-xs text-slate-500">{formatTimestamp(post.createdAt)}</p>
-                </article>
-              ))
+              <>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Posts</h3>
+                    <span className="text-xs text-slate-500">{authoredPosts.length}</span>
+                  </div>
+                  {authoredPosts.length ? (
+                    authoredPosts.map((post) => (
+                      <article key={post.id} className="rounded-2xl border border-slate-200 px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span className="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-700">
+                            {getPostKindLabel(post)}
+                          </span>
+                          {post.threadTitle ? (
+                            <Link href={`/forums/${post.threadId}`} className="text-sky-700 hover:text-sky-600">
+                              In {post.threadTitle}
+                            </Link>
+                          ) : null}
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm text-slate-800">{truncateContent(post.content)}</p>
+                        <p className="mt-2 text-xs text-slate-500">{formatTimestamp(post.createdAt)}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-600">No public posts yet.</p>
+                  )}
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Replies</h3>
+                    <span className="text-xs text-slate-500">{authoredReplies.length}</span>
+                  </div>
+                  {authoredReplies.length ? (
+                    authoredReplies.map((post) => (
+                      <article key={post.id} className="rounded-2xl border border-slate-200 px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span className="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-700">
+                            {getPostKindLabel(post)}
+                          </span>
+                          {post.threadTitle ? (
+                            <Link href={`/forums/${post.threadId}`} className="text-sky-700 hover:text-sky-600">
+                              In {post.threadTitle}
+                            </Link>
+                          ) : null}
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm text-slate-800">{truncateContent(post.content)}</p>
+                        <p className="mt-2 text-xs text-slate-500">{formatTimestamp(post.createdAt)}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-600">No public replies yet.</p>
+                  )}
+                </div>
+              </>
             ) : (
               <p className="text-sm text-slate-600">No public posts or replies yet.</p>
             )}

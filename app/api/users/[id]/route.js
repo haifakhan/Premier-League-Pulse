@@ -46,6 +46,14 @@ export async function GET(_request, context) {
             id: true,
             content: true,
             createdAt: true,
+            threadId: true,
+            parentPostId: true,
+            kind: true,
+            thread: {
+              select: {
+                title: true,
+              },
+            },
           },
         },
       },
@@ -65,7 +73,15 @@ export async function GET(_request, context) {
       followerCount: user._count.followers,
       followingCount: user._count.following,
       threads: user.threads,
-      posts: user.posts,
+      posts: user.posts.map((post) => ({
+        id: post.id,
+        content: post.content,
+        createdAt: post.createdAt,
+        threadId: post.threadId,
+        parentPostId: post.parentPostId,
+        kind: post.kind,
+        threadTitle: post.thread?.title ?? null,
+      })),
     };
 
     return NextResponse.json({ user: responseUser }, { status: 200 });

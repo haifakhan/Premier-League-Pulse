@@ -35,6 +35,10 @@ export type PublicUserPost = {
   id: string;
   content: string;
   createdAt: string;
+  threadId: string;
+  parentPostId: string | null;
+  kind: "ROOT" | "REPLY";
+  threadTitle: string | null;
 };
 
 export type PublicUserProfile = {
@@ -52,6 +56,18 @@ export type PublicUserProfile = {
 
 type PublicUserProfileResponse = {
   user: PublicUserProfile;
+};
+
+export type PublicUserActivityPoint = {
+  date: string;
+  count: number;
+  threads: number;
+  rootPosts: number;
+  replies: number;
+};
+
+type PublicUserActivityResponse = {
+  activity: PublicUserActivityPoint[];
 };
 
 export type CurrentUserProfile = AuthUser & {
@@ -141,6 +157,30 @@ export async function getPublicUserProfile(userId: string): Promise<PublicUserPr
   }
 
   return data.user;
+}
+
+export async function getPublicUserActivity(
+  userId: string,
+  from: string,
+  to: string
+): Promise<PublicUserActivityPoint[]> {
+  const query = new URLSearchParams({ from, to });
+  const response = await fetch(`/api/users/${userId}/activity?${query.toString()}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  const data = await parseJson<PublicUserActivityResponse>(response);
+
+  if (!response.ok) {
+    throw new AuthApiError(getErrorMessage(data, "Failed to fetch user activity"), response.status);
+  }
+
+  if (!data || typeof data !== "object" || !("activity" in data) || !Array.isArray(data.activity)) {
+    throw new AuthApiError("Invalid server response", response.status);
+  }
+
+  return data.activity;
 }
 
 async function mutateFollow(url: string, token: string, method: "POST" | "DELETE", fallbackMessage: string) {
