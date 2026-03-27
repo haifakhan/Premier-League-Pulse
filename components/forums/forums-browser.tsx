@@ -23,6 +23,8 @@ interface TeamForumItem {
   threadCount: number;
 }
 
+const MATCH_THREAD_TAG = "match-thread";
+
 function toErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   if (typeof error === "string" && error.trim()) return error;
@@ -37,6 +39,31 @@ function formatTimestamp(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function normalizeTagValue(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isTeamScopedThread(thread: ThreadListItem): boolean {
+  return thread.forumType === "TEAM" || Boolean(thread.matchId);
+}
+
+function getThreadTagSet(thread: ThreadListItem): Set<string> {
+  const tags = new Set<string>();
+
+  if (Array.isArray(thread.tags)) {
+    for (const tag of thread.tags) {
+      const normalized = normalizeTagValue(tag);
+      if (normalized) tags.add(normalized);
+    }
+  }
+
+  if (thread.matchId) {
+    tags.add(MATCH_THREAD_TAG);
+  }
+
+  return tags;
 }
 
 function SidebarCard({
@@ -71,6 +98,7 @@ function ThreadCard({
 }) {
   const repliesCount = Math.max(0, (thread.postsCount ?? 0) - 1);
   const isOpen = thread.status === "OPEN";
+  const isTeamThread = isTeamScopedThread(thread);
   const previewText = thread.matchId
     ? "Match-focused fan discussion. Open the thread to read the full post and replies."
     : thread.tags?.length
@@ -100,6 +128,8 @@ function ThreadCard({
                 />
                 {teamMeta?.shortName ?? teamMeta?.name ?? `Team ${thread.teamId}`}
               </span>
+            ) : isTeamThread ? (
+              <ForumBadge tone="sky">Team Forum</ForumBadge>
             ) : (
               <ForumBadge tone="neutral">General</ForumBadge>
             )}
@@ -244,46 +274,54 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
     return map;
   }, [teams]);
 
-  const teamForums = useMemo(() => {
-    const map = new Map<string, TeamForumItem>();
+  const teamThreadCounts = useMemo(() => {
+    const counts = new Map<string, number>();
 
     for (const thread of threads) {
       if (thread.forumType !== "TEAM" || !thread.teamId) continue;
-      const teamId = thread.teamId;
-      const existing = map.get(teamId);
-      const team = teamLookup.get(teamId);
-
-      if (!existing) {
-        map.set(teamId, {
-          teamId,
-          teamName: team?.name ?? `Team ${teamId}`,
-          teamCrest: team?.crest ?? null,
-          threadCount: 1,
-        });
-        continue;
-      }
-
-      existing.threadCount += 1;
+      counts.set(thread.teamId, (counts.get(thread.teamId) ?? 0) + 1);
     }
 
-    return Array.from(map.values()).sort((a, b) => {
+    return counts;
+  }, [threads]);
+
+  const sidebarTeams = useMemo(() => {
+    const items: TeamForumItem[] = teams.map((team) => ({
+      teamId: team.id,
+      teamName: team.name,
+      teamCrest: team.crest ?? null,
+      threadCount: teamThreadCounts.get(team.id) ?? 0,
+    }));
+
+    for (const [teamId, count] of teamThreadCounts.entries()) {
+      if (teamLookup.has(teamId)) continue;
+      items.push({
+        teamId,
+        teamName: `Team ${teamId}`,
+        teamCrest: null,
+        threadCount: count,
+      });
+    }
+
+    items.sort((a, b) => {
       if (b.threadCount !== a.threadCount) return b.threadCount - a.threadCount;
       return a.teamName.localeCompare(b.teamName);
     });
-  }, [threads, teamLookup]);
+
+    return items;
+  }, [teams, teamLookup, teamThreadCounts]);
 
   const effectiveSelectedTeamId = useMemo(() => {
     if (!selectedTeamId) return null;
-    return teamForums.some((entry) => entry.teamId === selectedTeamId) ? selectedTeamId : null;
-  }, [selectedTeamId, teamForums]);
+    return sidebarTeams.some((entry) => entry.teamId === selectedTeamId) ? selectedTeamId : null;
+  }, [selectedTeamId, sidebarTeams]);
 
   const popularTags = useMemo(() => {
     const counts = new Map<string, number>();
     for (const thread of threads) {
-      if (!thread.tags?.length) continue;
-      for (const tag of thread.tags) {
-        const normalized = tag.trim().toLowerCase();
-        if (!normalized) continue;
+      const tags = getThreadTagSet(thread);
+      if (tags.size === 0) continue;
+      for (const normalized of tags) {
         counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
       }
     }
@@ -301,9 +339,9 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
     let next = [...threads];
 
     if (forumScope === "general") {
-      next = next.filter((thread) => thread.forumType === "GENERAL");
+      next = next.filter((thread) => !isTeamScopedThread(thread));
     } else if (forumScope === "team") {
-      next = next.filter((thread) => thread.forumType === "TEAM");
+      next = next.filter((thread) => isTeamScopedThread(thread));
     }
 
     if (effectiveSelectedTeamId) {
@@ -313,12 +351,8 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
     }
 
     if (selectedTag) {
-      const target = selectedTag.trim().toLowerCase();
-      next = next.filter((thread) =>
-        Array.isArray(thread.tags)
-          ? thread.tags.some((tag) => tag.trim().toLowerCase() === target)
-          : false
-      );
+      const target = normalizeTagValue(selectedTag);
+      next = next.filter((thread) => getThreadTagSet(thread).has(target));
     }
 
     if (searchQuery.trim()) {
@@ -326,7 +360,8 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
       next = next.filter((thread) => {
         if (thread.title.toLowerCase().includes(q)) return true;
         if (thread.author.username.toLowerCase().includes(q)) return true;
-        if (Array.isArray(thread.tags) && thread.tags.some((tag) => tag.toLowerCase().includes(q))) {
+        const tags = getThreadTagSet(thread);
+        if (Array.from(tags).some((tag) => tag.includes(q))) {
           return true;
         }
         const team = thread.teamId ? teamLookup.get(thread.teamId) : null;
@@ -448,31 +483,33 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
                 ].join(" ")}
               >
                 <span>All Teams</span>
-                <span className="text-xs">{teamForums.reduce((sum, team) => sum + team.threadCount, 0)}</span>
+                <span className="text-xs">{sidebarTeams.reduce((sum, team) => sum + team.threadCount, 0)}</span>
               </button>
 
-              {teamForums.map((team) => {
-                const isSelected = effectiveSelectedTeamId === team.teamId;
-                return (
-                  <button
-                    key={team.teamId}
-                    type="button"
-                    onClick={() => handleSelectTeam(team.teamId)}
-                    className={[
-                      "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium transition",
-                      isSelected
-                        ? "border-sky-400/70 bg-sky-100/80 text-sky-800 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200"
-                        : "border-slate-300/80 bg-slate-100/70 text-slate-700 hover:border-slate-400/80 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-slate-600",
-                    ].join(" ")}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <ForumTeamCrest src={team.teamCrest} teamName={team.teamName} className="h-6 w-6" />
-                      <span className="truncate">{team.teamName}</span>
-                    </span>
-                    <span className="text-xs">{team.threadCount}</span>
-                  </button>
-                );
-              })}
+              <div className="max-h-[190px] space-y-2 overflow-y-auto pr-1">
+                {sidebarTeams.map((team) => {
+                  const isSelected = effectiveSelectedTeamId === team.teamId;
+                  return (
+                    <button
+                      key={team.teamId}
+                      type="button"
+                      onClick={() => handleSelectTeam(team.teamId)}
+                      className={[
+                        "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-medium transition",
+                        isSelected
+                          ? "border-sky-400/70 bg-sky-100/80 text-sky-800 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200"
+                          : "border-slate-300/80 bg-slate-100/70 text-slate-700 hover:border-slate-400/80 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-slate-600",
+                      ].join(" ")}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ForumTeamCrest src={team.teamCrest} teamName={team.teamName} className="h-6 w-6" />
+                        <span className="truncate">{team.teamName}</span>
+                      </span>
+                      <span className="text-xs">{team.threadCount}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </SidebarCard>
 
@@ -575,7 +612,8 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
                   <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
                     Team Forums
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="max-h-[190px] overflow-y-auto pr-1">
+                    <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => handleSelectTeam(null)}
@@ -588,7 +626,7 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
                     >
                       All Teams
                     </button>
-                    {teamForums.map((team) => {
+                    {sidebarTeams.map((team) => {
                       const isSelected = effectiveSelectedTeamId === team.teamId;
                       return (
                         <button
@@ -606,6 +644,7 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
                         </button>
                       );
                     })}
+                    </div>
                   </div>
                 </div>
 
