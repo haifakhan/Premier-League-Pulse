@@ -17,17 +17,26 @@ interface MatchCardProps {
 interface MatchdayOption {
   id: string;
   label: string;
+  kind: "all" | "matchday" | "stage";
   matchday: number | null;
+  stage: string | null;
 }
 
 type StatusFilter = "all" | "upcoming" | "recent";
 
 const ALL_MATCHDAY_ID = "all";
+const DEFAULT_MATCHDAY_OPTION: MatchdayOption = {
+  id: ALL_MATCHDAY_ID,
+  label: "All",
+  kind: "all",
+  matchday: null,
+  stage: null,
+};
 
 const STATUS_FILTER_OPTIONS: Array<{ id: StatusFilter; label: string }> = [
   { id: "all", label: "All Matches" },
   { id: "upcoming", label: "Upcoming" },
-  { id: "recent", label: "Recently Completed" },
+  { id: "recent", label: "Completed" },
 ];
 
 function getShortName(name: string): string {
@@ -82,6 +91,23 @@ function formatDateRange(startDate: Date, endDate: Date): string {
   return `${startLabel} - ${endLabel}`;
 }
 
+function formatStageLabel(stage: string): string {
+  return stage
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeStage(stage: string): string {
+  return stage.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+function buildStageId(stage: string): string {
+  return `stage-${normalizeStage(stage).replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`;
+}
+
 function buildMatchdayOptions(matches: Match[]): MatchdayOption[] {
   const matchdays = Array.from(
     new Set(
@@ -94,40 +120,62 @@ function buildMatchdayOptions(matches: Match[]): MatchdayOption[] {
     .map((matchday) => ({
       id: `matchday-${matchday}`,
       label: `Matchday ${matchday}`,
+      kind: "matchday" as const,
       matchday,
+      stage: null,
+    }));
+
+  const stageMap = new Map<string, string>();
+  matches.forEach((match) => {
+    if (!match.stage || !match.stage.trim()) return;
+    const normalized = normalizeStage(match.stage);
+    if (!stageMap.has(normalized)) {
+      stageMap.set(normalized, match.stage.trim());
+    }
+  });
+
+  const stages = Array.from(stageMap.values())
+    .sort((a, b) => formatStageLabel(a).localeCompare(formatStageLabel(b)))
+    .map((stage) => ({
+      id: buildStageId(stage),
+      label: formatStageLabel(stage),
+      kind: "stage" as const,
+      matchday: null,
+      stage,
     }));
 
   return [
-    {
-      id: ALL_MATCHDAY_ID,
-      label: "All",
-      matchday: null,
-    },
+    DEFAULT_MATCHDAY_OPTION,
     ...matchdays,
+    ...stages,
   ];
 }
 
 function filterMatchesByMatchday(matches: Match[], selectedMatchday: MatchdayOption): Match[] {
-  if (selectedMatchday.matchday === null) return matches;
-  return matches.filter((match) => match.matchday === selectedMatchday.matchday);
+  if (selectedMatchday.kind === "all") return matches;
+
+  if (selectedMatchday.kind === "matchday") {
+    return matches.filter((match) => match.matchday === selectedMatchday.matchday);
+  }
+
+  const selectedStage = selectedMatchday.stage;
+  if (!selectedStage) return matches;
+  const normalizedSelectedStage = normalizeStage(selectedStage);
+  return matches.filter((match) => {
+    if (!match.stage || !match.stage.trim()) return false;
+    return normalizeStage(match.stage) === normalizedSelectedStage;
+  });
 }
 
 function getDateRangeLabel(matches: Match[], selectedMatchday: MatchdayOption): string {
-  const scopedMatches =
-    selectedMatchday.matchday === null
-      ? matches
-      : matches.filter((match) => match.matchday === selectedMatchday.matchday);
+  const scopedMatches = filterMatchesByMatchday(matches, selectedMatchday);
 
   const timestamps = scopedMatches
     .map((match) => new Date(match.utcDate).getTime())
     .filter((timestamp) => Number.isFinite(timestamp))
     .sort((a, b) => a - b);
 
-  if (timestamps.length === 0) {
-    return selectedMatchday.matchday === null
-      ? "No fixtures available"
-      : "No fixtures in this matchday";
-  }
+  if (timestamps.length === 0) return "No fixtures available";
 
   return formatDateRange(new Date(timestamps[0]), new Date(timestamps[timestamps.length - 1]));
 }
@@ -247,7 +295,7 @@ function MatchCard({ match, isCompleted }: MatchCardProps) {
           </span>
         </div>
 
-        <div className="px-4 py-4 md:px-5">
+        <div className="px-4 py-4 md:flex md:h-full md:items-center md:px-5">
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <TeamLogo src={match.homeTeam.crest} teamName={match.homeTeam.name} />
@@ -320,10 +368,10 @@ function MatchdaySelectorSkeleton() {
 function EmptyState({ statusFilter }: { statusFilter: StatusFilter }) {
   const emptyText =
     statusFilter === "all"
-      ? "No matches found for the selected matchday."
+      ? "No matches found for the selected filter."
       : statusFilter === "upcoming"
-        ? "No upcoming matches found for the selected matchday."
-        : "No recently completed matches found for the selected matchday.";
+        ? "No upcoming matches found for the selected filter."
+        : "No completed matches found for the selected filter.";
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-14 text-center dark:border-slate-700 dark:bg-slate-900">
@@ -331,7 +379,9 @@ function EmptyState({ statusFilter }: { statusFilter: StatusFilter }) {
         <CalendarIcon className="h-6 w-6" />
       </div>
       <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{emptyText}</p>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Try another status or matchday.</p>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        Try another status, matchday, or stage.
+      </p>
     </div>
   );
 }
@@ -352,12 +402,7 @@ export default function MatchesPage() {
   const matchdayOptions = useMemo(() => buildMatchdayOptions(allMatches), [allMatches]);
 
   const selectedMatchday = useMemo(
-    () =>
-      matchdayOptions.find((option) => option.id === selectedMatchdayId) ?? {
-        id: ALL_MATCHDAY_ID,
-        label: "All",
-        matchday: null,
-      },
+    () => matchdayOptions.find((option) => option.id === selectedMatchdayId) ?? DEFAULT_MATCHDAY_OPTION,
     [matchdayOptions, selectedMatchdayId]
   );
 
@@ -460,7 +505,7 @@ export default function MatchesPage() {
                 Matches List
               </h1>
               <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300 sm:text-base">
-                Explore all matchdays, switch between upcoming and recently completed fixtures, and open any match
+                Explore all matchdays, switch between upcoming and completed fixtures, and open any match
                 for details.
               </p>
             </div>
@@ -512,7 +557,10 @@ export default function MatchesPage() {
               <div className="inline-flex min-w-full gap-2 whitespace-nowrap pb-1">
                 {matchdayOptions.map((option) => {
                   const isSelected = option.id === selectedMatchday.id;
-                  const quickSelectLabel = option.matchday === null ? "All" : String(option.matchday);
+                  const quickSelectLabel =
+                    option.kind === "matchday" && option.matchday !== null
+                      ? String(option.matchday)
+                      : option.label;
 
                   return (
                     <button

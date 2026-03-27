@@ -1,10 +1,11 @@
-import { getMatches } from "../../../../lib/footballData.js";
+import { getMatches, getTeams } from "../../../../lib/footballData.js";
 import { getOrSetCache, CACHE_TTLS } from "../../../../lib/cache.js";
 
 export const dynamic = "force-dynamic";
 
 const VALID_MATCHDAY_MIN = 1;
 const VALID_MATCHDAY_MAX = 38;
+const TEAMS_CACHE_KEY = "sports:pl:teams:all";
 
 function parseMatchday(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -52,6 +53,46 @@ function mergeUpcomingResponses(primary, secondary) {
   };
 }
 
+function buildTeamVenueLookup(teamsPayload) {
+  const lookup = new Map();
+  const teams = Array.isArray(teamsPayload?.teams) ? teamsPayload.teams : [];
+
+  for (const team of teams) {
+    const id = team?.id;
+    const venue = team?.venue;
+
+    if (Number.isInteger(id) && typeof venue === "string" && venue.trim()) {
+      lookup.set(id, venue.trim());
+    }
+  }
+
+  return lookup;
+}
+
+function enrichMatchesWithVenue(matchesPayload, teamVenueLookup) {
+  if (!matchesPayload || typeof matchesPayload !== "object") return matchesPayload;
+  if (!Array.isArray(matchesPayload.matches)) return matchesPayload;
+
+  let changed = false;
+  const enrichedMatches = matchesPayload.matches.map((match) => {
+    if (typeof match?.venue === "string" && match.venue.trim()) {
+      return match;
+    }
+
+    const homeTeamId = match?.homeTeam?.id;
+    if (!Number.isInteger(homeTeamId)) return match;
+
+    const fallbackVenue = teamVenueLookup.get(homeTeamId);
+    if (!fallbackVenue) return match;
+
+    changed = true;
+    return { ...match, venue: fallbackVenue };
+  });
+
+  if (!changed) return matchesPayload;
+  return { ...matchesPayload, matches: enrichedMatches };
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const status = normalizeStatus(searchParams.get("status"));
@@ -94,7 +135,23 @@ export async function GET(request) {
         return getMatches({ status: mappedStatus, matchday });
       }
     );
-    return Response.json(result, { status: 200 });
+
+    let enrichedData = result.data;
+    try {
+      const teamsResult = await getOrSetCache(
+        TEAMS_CACHE_KEY,
+        CACHE_TTLS.teams,
+        () => getTeams()
+      );
+      const teamVenueLookup = buildTeamVenueLookup(teamsResult?.data);
+      if (teamVenueLookup.size > 0) {
+        enrichedData = enrichMatchesWithVenue(result.data, teamVenueLookup);
+      }
+    } catch (err) {
+      console.warn("Venue enrichment skipped:", err?.message || err);
+    }
+
+    return Response.json({ ...result, data: enrichedData }, { status: 200 });
   } catch (err) {
     return Response.json(
       {
