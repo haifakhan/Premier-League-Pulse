@@ -279,69 +279,88 @@ function MatchCard({ match, isCompleted }: MatchCardProps) {
   const statusLabel = isCompleted ? "FT" : "Upcoming";
 
   return (
-    <Link
-      href={`/matches/${match.id}`}
-      className="group block overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:border-sky-500/70 hover:shadow-lg focus-visible:border-sky-500/70 focus-visible:shadow-lg focus-visible:outline-none dark:border-slate-700 dark:bg-slate-900 dark:hover:border-sky-500/70 dark:focus-visible:border-sky-500/70"
+    <article
+      className="overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all duration-200 hover:border-sky-500/70 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:hover:border-sky-500/70"
       aria-label={`${match.homeTeam.name} vs ${match.awayTeam.name}`}
     >
-      <article className="flex flex-col md:grid md:grid-cols-[180px_minmax(0,1fr)_190px]">
-        <div className="border-b border-slate-200 px-4 py-4 md:border-r md:border-b-0 dark:border-slate-700">
-          <p className="text-xs font-semibold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
-            {formatMatchDate(match.utcDate)}
-          </p>
-          <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
-            {formatMatchTime(match.utcDate)}
-          </p>
-          <span
-            className={[
-              "mt-3 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold tracking-wide uppercase",
-              isCompleted
-                ? "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
-                : "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-600 dark:bg-sky-700/20 dark:text-sky-300",
-            ].join(" ")}
-          >
-            {statusLabel}
-          </span>
-        </div>
-
-        <div className="px-4 py-4 md:flex md:h-full md:items-center md:px-5">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <TeamLogo src={match.homeTeam.crest} teamName={match.homeTeam.name} />
-              <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {match.homeTeam.name}
-              </p>
-            </div>
-
+      <Link
+        href={`/matches/${match.id}`}
+        className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 dark:focus-visible:ring-sky-500"
+      >
+        <div className="flex flex-col md:grid md:grid-cols-[180px_minmax(0,1fr)_190px]">
+          <div className="border-b border-slate-200 px-4 py-4 md:border-r md:border-b-0 dark:border-slate-700">
+            <p className="text-xs font-semibold tracking-[0.14em] text-slate-500 uppercase dark:text-slate-400">
+              {formatMatchDate(match.utcDate)}
+            </p>
+            <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+              {formatMatchTime(match.utcDate)}
+            </p>
             <span
               className={[
-                "min-w-16 text-center text-sm font-extrabold tracking-[0.16em] uppercase",
-                isCompleted ? "text-slate-900 dark:text-slate-100" : "text-sky-700 dark:text-sky-300",
+                "mt-3 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold tracking-wide uppercase",
+                isCompleted
+                  ? "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                  : "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-600 dark:bg-sky-700/20 dark:text-sky-300",
               ].join(" ")}
             >
-              {resultLabel}
+              {statusLabel}
             </span>
+          </div>
 
-            <div className="flex min-w-0 items-center justify-end gap-2.5">
-              <TeamLogo src={match.awayTeam.crest} teamName={match.awayTeam.name} />
-              <p className="truncate text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {match.awayTeam.name}
-              </p>
+          <div className="px-4 py-4 md:flex md:h-full md:items-center md:px-5">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <TeamLogo src={match.homeTeam.crest} teamName={match.homeTeam.name} />
+                <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {match.homeTeam.name}
+                </p>
+              </div>
+
+              <span
+                className={[
+                  "min-w-16 text-center text-sm font-extrabold tracking-[0.16em] uppercase",
+                  isCompleted ? "text-slate-900 dark:text-slate-100" : "text-sky-700 dark:text-sky-300",
+                ].join(" ")}
+              >
+                {resultLabel}
+              </span>
+
+              <div className="flex min-w-0 items-center justify-end gap-2.5">
+                <TeamLogo src={match.awayTeam.crest} teamName={match.awayTeam.name} />
+                <p className="truncate text-right text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {match.awayTeam.name}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 md:border-t-0 md:border-l dark:border-slate-700 dark:bg-slate-800/50">
-          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-300">
-            <MapPinIcon className="h-4 w-4 text-sky-600 dark:text-sky-300" />
-            <p className="text-xs font-semibold tracking-[0.12em] uppercase">Venue</p>
+          <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 md:border-t-0 md:border-l dark:border-slate-700 dark:bg-slate-800/50">
+            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-300">
+              <MapPinIcon className="h-4 w-4 text-sky-600 dark:text-sky-300" />
+              <p className="text-xs font-semibold tracking-[0.12em] uppercase">Venue</p>
+            </div>
+            <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+              {match.venue || "Venue TBD"}
+            </p>
           </div>
-          <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-            {match.venue || "Venue TBD"}
-          </p>
         </div>
-      </article>
-    </Link>
+      </Link>
+
+      <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
+        <Link
+          href={`/matches/${match.id}`}
+          className="text-xs font-semibold text-slate-700 transition hover:text-sky-700 dark:text-slate-200 dark:hover:text-sky-300"
+        >
+          Match Details
+        </Link>
+        <Link
+          href={`/matches/${match.id}/discussion`}
+          className="rounded-full bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-500"
+        >
+          Discuss
+        </Link>
+      </div>
+    </article>
   );
 }
 

@@ -137,6 +137,24 @@ type TagsResponse =
     }
   | Array<string | { name?: string }>;
 
+export type MatchThreadAvailability = {
+  matchId: string;
+  availability: "PRE_WINDOW" | "OPEN_WINDOW" | "POST_WINDOW" | "INVALID" | string;
+  window: {
+    opensAt: string | null;
+    closesAt: string | null;
+    matchStart: string | null;
+    matchEnd: string | null;
+  };
+  thread: {
+    id: string;
+    status: "OPEN" | "CLOSED" | string;
+    url: string;
+  } | null;
+  canPost: boolean;
+  syncedAction: string;
+};
+
 function getApiErrorMessage(data: unknown, fallback: string) {
   if (
     data &&
@@ -208,6 +226,21 @@ export async function listThreads(): Promise<ListThreadsResponse["threads"]> {
   );
 
   return data.threads;
+}
+
+export async function getMatchThreadAvailability(
+  matchId: string | number
+): Promise<MatchThreadAvailability> {
+  const data = await requestJson<MatchThreadAvailability>(
+    `/api/threads/match/${String(matchId)}`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+    "Failed to fetch match discussion thread"
+  );
+
+  return data;
 }
 
 export async function createThread(
