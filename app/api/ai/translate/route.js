@@ -61,10 +61,16 @@ export async function POST(request) {
           isHidden: true,
           isDeleted: true,
           updatedAt: true,
+          thread: {
+            select: {
+              isHidden: true,
+              isDeleted: true,
+            },
+          },
         },
       });
 
-      if (!post || post.isHidden || post.isDeleted) {
+      if (!post || post.isHidden || post.isDeleted || post.thread?.isHidden || post.thread?.isDeleted) {
         return NextResponse.json({ error: "Post not found" }, { status: 404 });
       }
 

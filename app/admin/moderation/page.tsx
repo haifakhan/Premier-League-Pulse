@@ -31,6 +31,18 @@ function formatAiScore(score: number | null): string {
   return `${Math.round(score * 100)}%`;
 }
 
+function formatVerdict(value: ModerationQueueItem["verdict"]): string {
+  if (value === "LIKELY_INAPPROPRIATE") {
+    return "Likely inappropriate";
+  }
+
+  if (value === "LIKELY_ACCEPTABLE") {
+    return "Likely acceptable";
+  }
+
+  return "Unknown";
+}
+
 function getPreview(item: ModerationQueueItem): string {
   if (item.targetType === "POST") {
     const content = item.post?.content?.trim() ?? "";
@@ -210,6 +222,8 @@ export default function AdminModerationPage() {
                 <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">{getPreview(item)}</p>
 
                 <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                  <p>Verdict: {formatVerdict(item.verdict)}</p>
+                  <p>Explanation: {item.verdictExplanation}</p>
                   <p>AI label: {item.aiLabel ?? "N/A"}</p>
                   <p>Latest report: {formatTimestamp(item.latestReportedAt)}</p>
                 </div>

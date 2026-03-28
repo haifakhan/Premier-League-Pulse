@@ -8,6 +8,8 @@ export type ModerationQueueItem = {
   targetId: string;
   aiScore: number | null;
   aiLabel: string | null;
+  verdict: "LIKELY_INAPPROPRIATE" | "LIKELY_ACCEPTABLE" | "UNKNOWN";
+  verdictExplanation: string;
   latestReportedAt: string;
   pendingUserReportCount: number;
   pendingReportCount: number;

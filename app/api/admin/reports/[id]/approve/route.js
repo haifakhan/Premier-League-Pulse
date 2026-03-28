@@ -12,6 +12,10 @@ function getErrorStatus(message) {
     return 403;
   }
 
+  if (message === "Report target not found") {
+    return 404;
+  }
+
   return 500;
 }
 
@@ -38,59 +42,135 @@ export async function POST(request, context) {
       );
     }
 
-    const targetType = report.postId ? "POST" : report.threadId ? "THREAD" : null;
-    const targetId = report.postId ?? report.threadId;
-
-    if (!targetType || !targetId) {
+    if (!report.postId && !report.threadId) {
       return NextResponse.json({ error: "Report target not found" }, { status: 404 });
     }
 
     const now = new Date();
-    const reportWhere =
-      targetType === "POST"
-        ? { postId: targetId, status: "PENDING" }
-        : { threadId: targetId, status: "PENDING" };
+    const updatedReportsCount = await prisma.$transaction(async (tx) => {
+      if (report.threadId) {
+        const threadId = report.threadId;
+        const threadPosts = await tx.post.findMany({
+          where: { threadId },
+          select: { id: true },
+        });
+        const threadPostIds = threadPosts.map((post) => post.id);
 
-    const operations = [];
-    operations.push(
-      prisma.report.updateMany({
-        where: reportWhere,
+        const updateReportsResult = await tx.report.updateMany({
+          where: {
+            status: "PENDING",
+            OR: [
+              { threadId },
+              ...(threadPostIds.length ? [{ postId: { in: threadPostIds } }] : []),
+            ],
+          },
+          data: {
+            status: "APPROVED",
+            reviewedAt: now,
+            reviewedByUserId: payload.id,
+          },
+        });
+
+        await tx.thread.updateMany({
+          where: { id: threadId },
+          data: {
+            isHidden: true,
+            hiddenAt: now,
+            hiddenByUserId: payload.id,
+          },
+        });
+
+        await tx.post.updateMany({
+          where: { threadId },
+          data: {
+            isHidden: true,
+            hiddenAt: now,
+            hiddenByUserId: payload.id,
+          },
+        });
+
+        return updateReportsResult.count;
+      }
+
+      const post = await tx.post.findUnique({
+        where: { id: report.postId },
+        select: {
+          id: true,
+          kind: true,
+          threadId: true,
+        },
+      });
+
+      if (!post) {
+        throw new Error("Report target not found");
+      }
+
+      if (post.kind === "ROOT") {
+        const threadPosts = await tx.post.findMany({
+          where: { threadId: post.threadId },
+          select: { id: true },
+        });
+        const threadPostIds = threadPosts.map((item) => item.id);
+
+        const updateReportsResult = await tx.report.updateMany({
+          where: {
+            status: "PENDING",
+            OR: [
+              { threadId: post.threadId },
+              ...(threadPostIds.length ? [{ postId: { in: threadPostIds } }] : []),
+            ],
+          },
+          data: {
+            status: "APPROVED",
+            reviewedAt: now,
+            reviewedByUserId: payload.id,
+          },
+        });
+
+        await tx.thread.updateMany({
+          where: { id: post.threadId },
+          data: {
+            isHidden: true,
+            hiddenAt: now,
+            hiddenByUserId: payload.id,
+          },
+        });
+
+        await tx.post.updateMany({
+          where: { threadId: post.threadId },
+          data: {
+            isHidden: true,
+            hiddenAt: now,
+            hiddenByUserId: payload.id,
+          },
+        });
+
+        return updateReportsResult.count;
+      }
+
+      const updateReportsResult = await tx.report.updateMany({
+        where: {
+          postId: post.id,
+          status: "PENDING",
+        },
         data: {
           status: "APPROVED",
           reviewedAt: now,
           reviewedByUserId: payload.id,
         },
-      })
-    );
+      });
 
-    if (report.postId) {
-      operations.push(
-        prisma.post.updateMany({
-          where: { id: report.postId },
-          data: {
-            isHidden: true,
-            hiddenAt: now,
-            hiddenByUserId: payload.id,
-          },
-        })
-      );
-    }
+      await tx.post.updateMany({
+        where: { id: post.id },
+        data: {
+          isHidden: true,
+          hiddenAt: now,
+          hiddenByUserId: payload.id,
+        },
+      });
 
-    if (report.threadId) {
-      operations.push(
-        prisma.thread.updateMany({
-          where: { id: report.threadId },
-          data: {
-            isHidden: true,
-            hiddenAt: now,
-            hiddenByUserId: payload.id,
-          },
-        })
-      );
-    }
-
-    const results = await prisma.$transaction(operations);
-    const updatedReportsCount = results?.[0]?.count ?? 0;
+      return updateReportsResult.count;
+    });
 
     return NextResponse.json({ success: true, updatedReportsCount }, { status: 200 });
   } catch (error) {

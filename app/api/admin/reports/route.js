@@ -21,6 +21,79 @@ function isAutoFlagReason(value) {
   return value === AUTO_FLAG_REASON || value.startsWith(`${AUTO_FLAG_REASON} |`);
 }
 
+function parseStoredReason(value) {
+  if (typeof value !== "string") {
+    return { baseReason: null, details: null };
+  }
+
+  const separatorIndex = value.indexOf("|");
+  if (separatorIndex === -1) {
+    const reason = value.trim();
+    return { baseReason: reason || null, details: null };
+  }
+
+  const baseReason = value.slice(0, separatorIndex).trim();
+  const details = value.slice(separatorIndex + 1).trim();
+
+  return {
+    baseReason: baseReason || null,
+    details: details || null,
+  };
+}
+
+function formatPercentage(value) {
+  if (typeof value !== "number") {
+    return "N/A";
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function getVerdict(aiScore, aiLabel) {
+  if (typeof aiScore !== "number" || typeof aiLabel !== "string" || aiLabel.trim().length === 0) {
+    return "UNKNOWN";
+  }
+
+  return aiScore >= 0.5 ? "LIKELY_INAPPROPRIATE" : "LIKELY_ACCEPTABLE";
+}
+
+function truncateDetail(value, maxLength = 160) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength).trim()}...`;
+}
+
+function buildVerdictExplanation({
+  aiLabel,
+  aiScore,
+  userReasonCounts,
+  detailSnippet,
+}) {
+  const labelText = typeof aiLabel === "string" && aiLabel.trim().length > 0 ? aiLabel.trim() : "N/A";
+  const scoreText = formatPercentage(aiScore);
+  const aiContext = `Top AI label: ${labelText}. Toxicity score: ${scoreText}.`;
+
+  const reasons = Object.entries(userReasonCounts).sort(([a], [b]) => a.localeCompare(b));
+  const userContext = reasons.length
+    ? `User report reasons: ${reasons.map(([reason, count]) => `${reason}(${count})`).join(", ")}.`
+    : "No user report reasons yet.";
+
+  const detailContext = detailSnippet ? ` Details: ${detailSnippet}.` : "";
+
+  return `${aiContext} ${userContext}${detailContext}`;
+}
+
 export async function GET(request) {
   try {
     const payload = requireAuth(request);
@@ -75,11 +148,22 @@ export async function GET(request) {
         relatedThreadId: targetType === "THREAD" ? targetId : report.post?.threadId ?? null,
         post: targetType === "POST" ? { content: report.post?.content ?? "" } : null,
         thread: targetType === "THREAD" ? { title: report.thread?.title ?? "" } : null,
+        userReasonCounts: {},
+        firstDetailSnippet: null,
       };
 
       existing.pendingReportCount += 1;
+      const parsedReason = parseStoredReason(report.reason);
+
       if (!isAutoFlagReason(report.reason)) {
         existing.pendingUserReportCount += 1;
+
+        const reasonKey = parsedReason.baseReason || "Other";
+        existing.userReasonCounts[reasonKey] = (existing.userReasonCounts[reasonKey] ?? 0) + 1;
+      }
+
+      if (!existing.firstDetailSnippet && parsedReason.details) {
+        existing.firstDetailSnippet = truncateDetail(parsedReason.details);
       }
 
       if (
@@ -105,32 +189,58 @@ export async function GET(request) {
       groupedByTarget.set(key, existing);
     }
 
-    const responseReports = Array.from(groupedByTarget.values()).sort((a, b) => {
-      const aScore = a.aiScore;
-      const bScore = b.aiScore;
+    const responseReports = Array.from(groupedByTarget.values())
+      .map((item) => {
+        const verdict = getVerdict(item.aiScore, item.aiLabel);
+        const verdictExplanation = buildVerdictExplanation({
+          aiLabel: item.aiLabel,
+          aiScore: item.aiScore,
+          userReasonCounts: item.userReasonCounts,
+          detailSnippet: item.firstDetailSnippet,
+        });
 
-      if (aScore == null && bScore != null) {
-        return 1;
-      }
+        return {
+          id: item.id,
+          targetType: item.targetType,
+          targetId: item.targetId,
+          aiScore: item.aiScore,
+          aiLabel: item.aiLabel,
+          latestReportedAt: item.latestReportedAt,
+          pendingUserReportCount: item.pendingUserReportCount,
+          pendingReportCount: item.pendingReportCount,
+          relatedThreadId: item.relatedThreadId,
+          post: item.post,
+          thread: item.thread,
+          verdict,
+          verdictExplanation,
+        };
+      })
+      .sort((a, b) => {
+        const aScore = a.aiScore;
+        const bScore = b.aiScore;
 
-      if (aScore != null && bScore == null) {
-        return -1;
-      }
+        if (aScore == null && bScore != null) {
+          return 1;
+        }
 
-      if (aScore != null && bScore != null && bScore !== aScore) {
-        return bScore - aScore;
-      }
+        if (aScore != null && bScore == null) {
+          return -1;
+        }
 
-      if (b.pendingUserReportCount !== a.pendingUserReportCount) {
-        return b.pendingUserReportCount - a.pendingUserReportCount;
-      }
+        if (aScore != null && bScore != null && bScore !== aScore) {
+          return bScore - aScore;
+        }
 
-      if (b.pendingReportCount !== a.pendingReportCount) {
-        return b.pendingReportCount - a.pendingReportCount;
-      }
+        if (b.pendingUserReportCount !== a.pendingUserReportCount) {
+          return b.pendingUserReportCount - a.pendingUserReportCount;
+        }
 
-      return new Date(b.latestReportedAt).getTime() - new Date(a.latestReportedAt).getTime();
-    });
+        if (b.pendingReportCount !== a.pendingReportCount) {
+          return b.pendingReportCount - a.pendingReportCount;
+        }
+
+        return new Date(b.latestReportedAt).getTime() - new Date(a.latestReportedAt).getTime();
+      });
 
     return NextResponse.json({ reports: responseReports }, { status: 200 });
   } catch (error) {

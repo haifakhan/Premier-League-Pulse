@@ -7,10 +7,20 @@ export async function GET(_request, context) {
   try {
     const post = await prisma.post.findUnique({
       where: { id: params.id },
-      select: { id: true, isDeleted: true, isHidden: true },
+      select: {
+        id: true,
+        isDeleted: true,
+        isHidden: true,
+        thread: {
+          select: {
+            isDeleted: true,
+            isHidden: true,
+          },
+        },
+      },
     });
 
-    if (!post || post.isDeleted || post.isHidden) {
+    if (!post || post.isDeleted || post.isHidden || post.thread?.isDeleted || post.thread?.isHidden) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
