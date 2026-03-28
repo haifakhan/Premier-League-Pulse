@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireAdmin } from "@/lib/auth";
+import { AUTO_FLAG_REASON } from "@/lib/ai";
 
 function getErrorStatus(message) {
   if (message.includes("Authorization") || message.includes("token")) {
@@ -15,6 +16,11 @@ function getErrorStatus(message) {
   return 500;
 }
 
+function isAutoFlagReason(value) {
+  if (typeof value !== "string") return false;
+  return value === AUTO_FLAG_REASON || value.startsWith(`${AUTO_FLAG_REASON} |`);
+}
+
 export async function GET(request) {
   try {
     const payload = requireAuth(request);
@@ -25,85 +31,100 @@ export async function GET(request) {
       select: {
         id: true,
         reason: true,
-        status: true,
         aiScore: true,
         aiLabel: true,
         createdAt: true,
-        reporterUserId: true,
         postId: true,
         threadId: true,
         post: {
           select: {
+            id: true,
             content: true,
           },
         },
         thread: {
           select: {
+            id: true,
             title: true,
           },
         },
       },
     });
 
-    const postIds = [...new Set(reports.map((report) => report.postId).filter(Boolean))];
-    const threadIds = [...new Set(reports.map((report) => report.threadId).filter(Boolean))];
+    const groupedByTarget = new Map();
 
-    const postCounts = postIds.length ? await prisma.report.groupBy({
-      by: ["postId"],
-      where: { postId: { in: postIds } },
-      _count: { _all: true },
-    }) : [];
+    for (const report of reports) {
+      const targetType = report.postId ? "POST" : report.threadId ? "THREAD" : null;
+      const targetId = report.postId ?? report.threadId ?? null;
 
-    const threadCounts = threadIds.length ? await prisma.report.groupBy({
-      by: ["threadId"],
-      where: { threadId: { in: threadIds } },
-      _count: { _all: true },
-    }) : [];
+      if (!targetType || !targetId) {
+        continue;
+      }
 
-    const postCountMap = new Map(postCounts.map((entry) => [entry.postId, entry._count._all]));
-    const threadCountMap = new Map(
-      threadCounts.map((entry) => [entry.threadId, entry._count._all])
-    );
+      const key = `${targetType}:${targetId}`;
+      const existing = groupedByTarget.get(key) ?? {
+        id: report.id,
+        targetType,
+        targetId,
+        aiScore: null,
+        aiLabel: null,
+        latestReportedAt: report.createdAt,
+        pendingUserReportCount: 0,
+        pendingReportCount: 0,
+        post: targetType === "POST" ? { content: report.post?.content ?? "" } : null,
+        thread: targetType === "THREAD" ? { title: report.thread?.title ?? "" } : null,
+      };
 
-    const responseReports = reports
-      .map((report) => {
-        const targetType = report.postId ? "POST" : "THREAD";
-        const reportCount = report.postId
-          ? postCountMap.get(report.postId) ?? 0
-          : threadCountMap.get(report.threadId) ?? 0;
+      existing.pendingReportCount += 1;
+      if (!isAutoFlagReason(report.reason)) {
+        existing.pendingUserReportCount += 1;
+      }
 
-        return {
-          id: report.id,
-          reason: report.reason,
-          status: report.status,
-          aiScore: report.aiScore,
-          aiLabel: report.aiLabel,
-          createdAt: report.createdAt,
-          reporterUserId: report.reporterUserId,
-          targetType,
-          post: report.post ? { content: report.post.content } : null,
-          thread: report.thread ? { title: report.thread.title } : null,
-          reportCount,
-        };
-      })
-      .sort((a, b) => {
-        const aScore = a.aiScore;
-        const bScore = b.aiScore;
+      if (
+        typeof report.aiScore === "number" &&
+        (existing.aiScore == null || report.aiScore > existing.aiScore)
+      ) {
+        existing.aiScore = report.aiScore;
+        existing.aiLabel = report.aiLabel;
+      }
 
-        if (aScore == null && bScore != null) {
-          return 1;
-        }
+      if (
+        new Date(report.createdAt).getTime() >
+        new Date(existing.latestReportedAt).getTime()
+      ) {
+        existing.latestReportedAt = report.createdAt;
+        existing.id = report.id;
+      }
 
-        if (aScore != null && bScore == null) {
-          return -1;
-        }
+      groupedByTarget.set(key, existing);
+    }
 
-        if (aScore != null && bScore != null && bScore !== aScore) {
-          return bScore - aScore;
-        }
+    const responseReports = Array.from(groupedByTarget.values()).sort((a, b) => {
+      const aScore = a.aiScore;
+      const bScore = b.aiScore;
 
-        return b.reportCount - a.reportCount;
-      });
+      if (aScore == null && bScore != null) {
+        return 1;
+      }
+
+      if (aScore != null && bScore == null) {
+        return -1;
+      }
+
+      if (aScore != null && bScore != null && bScore !== aScore) {
+        return bScore - aScore;
+      }
+
+      if (b.pendingUserReportCount !== a.pendingUserReportCount) {
+        return b.pendingUserReportCount - a.pendingUserReportCount;
+      }
+
+      if (b.pendingReportCount !== a.pendingReportCount) {
+        return b.pendingReportCount - a.pendingReportCount;
+      }
+
+      return new Date(b.latestReportedAt).getTime() - new Date(a.latestReportedAt).getTime();
+    });
 
     return NextResponse.json({ reports: responseReports }, { status: 200 });
   } catch (error) {

@@ -38,22 +38,34 @@ export async function POST(request, context) {
       );
     }
 
-    const now = new Date();
+    const targetType = report.postId ? "POST" : report.threadId ? "THREAD" : null;
+    const targetId = report.postId ?? report.threadId;
 
-    const operations = [
-      prisma.report.update({
-        where: { id: report.id },
+    if (!targetType || !targetId) {
+      return NextResponse.json({ error: "Report target not found" }, { status: 404 });
+    }
+
+    const now = new Date();
+    const reportWhere =
+      targetType === "POST"
+        ? { postId: targetId, status: "PENDING" }
+        : { threadId: targetId, status: "PENDING" };
+
+    const operations = [];
+    operations.push(
+      prisma.report.updateMany({
+        where: reportWhere,
         data: {
           status: "APPROVED",
           reviewedAt: now,
           reviewedByUserId: payload.id,
         },
-      }),
-    ];
+      })
+    );
 
     if (report.postId) {
       operations.push(
-        prisma.post.update({
+        prisma.post.updateMany({
           where: { id: report.postId },
           data: {
             isHidden: true,
@@ -66,7 +78,7 @@ export async function POST(request, context) {
 
     if (report.threadId) {
       operations.push(
-        prisma.thread.update({
+        prisma.thread.updateMany({
           where: { id: report.threadId },
           data: {
             isHidden: true,
@@ -77,9 +89,10 @@ export async function POST(request, context) {
       );
     }
 
-    await prisma.$transaction(operations);
+    const results = await prisma.$transaction(operations);
+    const updatedReportsCount = results?.[0]?.count ?? 0;
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ success: true, updatedReportsCount }, { status: 200 });
   } catch (error) {
     const message = error?.message || "Failed to approve report";
     return NextResponse.json({ error: message }, { status: getErrorStatus(message) });

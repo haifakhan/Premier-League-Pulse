@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { maybeAutoFlagPost } from "@/lib/ai";
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -97,6 +98,10 @@ export async function PATCH(request, context) {
         updatedAt: true,
       },
     });
+
+    if (updated?.id && typeof updated.content === "string") {
+      maybeAutoFlagPost(updated.id, payload.id, updated.content).catch(() => {});
+    }
 
     return NextResponse.json({ post: updated }, { status: 200 });
   } catch (error) {

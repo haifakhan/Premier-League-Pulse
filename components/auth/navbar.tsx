@@ -35,6 +35,14 @@ export default function AuthNavbar() {
             >
               Forums
             </Link>
+            {user?.role === "ADMIN" ? (
+              <Link
+                href="/admin/moderation"
+                className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                Moderation
+              </Link>
+            ) : null}
           </nav>
         </div>
 
@@ -75,6 +83,14 @@ export default function AuthNavbar() {
                 >
                   Edit Profile
                 </Link>
+                {user.role === "ADMIN" ? (
+                  <Link
+                    href="/admin/moderation"
+                    className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    Moderation
+                  </Link>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => void logout()}
