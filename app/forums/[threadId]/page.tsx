@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   createThreadPoll,
@@ -18,15 +18,33 @@ import {
   updatePost,
   voteInPoll,
 } from "@/lib/api/threads";
+import { createReport, REPORT_REASON_OPTIONS, type ReportReason, type ReportTargetType } from "@/lib/api/reports";
 import { getTeams, type TeamOption } from "@/lib/api/sports";
 import { useAuth } from "@/lib/context/auth";
 import { ForumBadge, ForumTagPill, ForumTeamCrest, ForumUserAvatar } from "@/components/forums/forum-ui";
+import ReportModal from "@/components/forums/report-modal";
 
 type RevisionState = {
   isLoading: boolean;
   error: string | null;
   isOpen: boolean;
   revisions: PostRevision[];
+};
+
+type ReportTarget = {
+  targetType: ReportTargetType;
+  targetId: string;
+};
+
+type ReportFormErrors = {
+  reason?: string;
+  details?: string;
+  submit?: string;
+};
+
+type ReportToast = {
+  tone: "success" | "error";
+  message: string;
 };
 
 function formatTimestamp(value: string) {
@@ -60,6 +78,85 @@ function ArrowLeftIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
       <path d="m15 5-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function EllipsisHorizontalIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+      <circle cx="6" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="18" cy="12" r="1.5" />
+    </svg>
+  );
+}
+
+function ReportOverflowMenu({
+  onReport,
+  label,
+  disabled = false,
+}: {
+  onReport: () => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handleDocumentClick(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleDocumentClick);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentClick);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+        disabled={disabled}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300/80 bg-slate-100/80 text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+      >
+        <EllipsisHorizontalIcon className="h-4 w-4" />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute right-0 z-30 mt-2 min-w-[140px] rounded-xl border border-slate-300/80 bg-white/95 p-1.5 shadow-lg dark:border-slate-700/70 dark:bg-slate-900/90">
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen(false);
+              onReport();
+            }}
+            className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-red-700 transition hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+          >
+            Report
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -196,6 +293,8 @@ function PostCard({
   onEditSubmit,
   onDelete,
   onToggleHistory,
+  replyAction,
+  reportAction,
 }: {
   post: ThreadPost;
   variant: "root" | "reply";
@@ -213,9 +312,27 @@ function PostCard({
   onEditSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onDelete: () => Promise<void>;
   onToggleHistory: () => Promise<void>;
+  replyAction?: {
+    canReply: boolean;
+    isOpen: boolean;
+    draft: string;
+    error: string | null;
+    isSubmitting: boolean;
+    onOpen: () => void;
+    onCancel: () => void;
+    onDraftChange: (value: string) => void;
+    onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  };
+  reportAction?: {
+    canReport: boolean;
+    isDisabled?: boolean;
+    onReport: () => void;
+  };
 }) {
   const isEdited = revisionState.revisions.length > 0;
   const isRoot = variant === "root";
+  const canShowReplyButton = variant === "reply" && Boolean(replyAction?.canReply);
+  const canShowReportButton = Boolean(reportAction?.canReport);
 
   return (
     <article
@@ -244,8 +361,25 @@ function PostCard({
           </div>
         </div>
 
-        {canManage ? (
+        {canManage || canShowReplyButton || canShowReportButton ? (
           <div className="flex gap-2">
+            {canShowReplyButton ? (
+              <button
+                type="button"
+                onClick={replyAction?.isOpen ? replyAction.onCancel : replyAction?.onOpen}
+                disabled={isDeleting || isSavingEdit || isClosed || isEditing || Boolean(replyAction?.isSubmitting)}
+                className="rounded-full border border-sky-300/80 bg-sky-100/80 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:border-sky-400 hover:bg-sky-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-sky-500/60 dark:bg-sky-500/15 dark:text-sky-200 dark:hover:bg-sky-500/25 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+              >
+                {replyAction?.isOpen ? "Cancel Reply" : "Reply"}
+              </button>
+            ) : null}
+            {canShowReportButton ? (
+              <ReportOverflowMenu
+                onReport={() => reportAction?.onReport()}
+                disabled={Boolean(reportAction?.isDisabled)}
+                label={`Report ${variant === "root" ? "post" : "reply"}`}
+              />
+            ) : null}
             <button
               type="button"
               onClick={isEditing ? onEditCancel : onEditStart}
@@ -305,6 +439,39 @@ function PostCard({
         </div>
       )}
 
+      {replyAction?.isOpen && replyAction.canReply ? (
+        <form
+          onSubmit={(event) => void replyAction.onSubmit(event)}
+          className="mt-4 space-y-3 rounded-xl border border-slate-300/80 bg-slate-100/70 p-4 dark:border-slate-700/70 dark:bg-slate-800/70"
+        >
+          <textarea
+            value={replyAction.draft}
+            onChange={(event) => replyAction.onDraftChange(event.target.value)}
+            className="min-h-28 w-full rounded-xl border border-slate-300/80 bg-white/90 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-sky-500"
+            placeholder="Write your reply"
+            required
+          />
+          {replyAction.error ? <p className="text-sm text-red-600 dark:text-red-300">{replyAction.error}</p> : null}
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              disabled={replyAction.isSubmitting}
+              className="rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
+            >
+              {replyAction.isSubmitting ? "Posting..." : "Post Reply"}
+            </button>
+            <button
+              type="button"
+              onClick={replyAction.onCancel}
+              disabled={replyAction.isSubmitting}
+              className="rounded-full border border-slate-300/80 bg-slate-100/80 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:text-slate-500"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+
       {isEdited || revisionState.isOpen ? (
         <div className="mt-5">
           <button
@@ -360,6 +527,10 @@ export default function ThreadPage() {
   const [replyDraft, setReplyDraft] = useState("");
   const [replyError, setReplyError] = useState<string | null>(null);
   const [isReplying, setIsReplying] = useState(false);
+  const [activeReplyTargetPostId, setActiveReplyTargetPostId] = useState<string | null>(null);
+  const [replyDraftsByPostId, setReplyDraftsByPostId] = useState<Record<string, string>>({});
+  const [replyErrorsByPostId, setReplyErrorsByPostId] = useState<Record<string, string | null>>({});
+  const [replyingPostIds, setReplyingPostIds] = useState<Record<string, boolean>>({});
   const [activeEditPostId, setActiveEditPostId] = useState<string | null>(null);
   const [editDrafts, setEditDrafts] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string | null>>({});
@@ -382,6 +553,12 @@ export default function ThreadPage() {
   }>({});
   const [pollFormError, setPollFormError] = useState<string | null>(null);
   const [isCreatingPoll, setIsCreatingPoll] = useState(false);
+  const [activeReportTarget, setActiveReportTarget] = useState<ReportTarget | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason>(REPORT_REASON_OPTIONS[0]);
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportErrors, setReportErrors] = useState<ReportFormErrors>({});
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [reportToast, setReportToast] = useState<ReportToast | null>(null);
 
   useEffect(() => {
     if (!threadId) {
@@ -417,6 +594,10 @@ export default function ThreadPage() {
         setTeamsById(
           Object.fromEntries(teamsData.map((team) => [team.id, team]))
         );
+        setActiveReplyTargetPostId(null);
+        setReplyDraftsByPostId({});
+        setReplyErrorsByPostId({});
+        setReplyingPostIds({});
         setReplyDraft("");
         setReplyError(null);
         setActiveEditPostId(null);
@@ -433,6 +614,11 @@ export default function ThreadPage() {
         });
         setPollFormErrors({});
         setPollFormError(null);
+        setActiveReportTarget(null);
+        setReportReason(REPORT_REASON_OPTIONS[0]);
+        setReportDetails("");
+        setReportErrors({});
+        setIsSubmittingReport(false);
       } catch (error) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : "Unable to load thread.");
@@ -452,6 +638,20 @@ export default function ThreadPage() {
       cancelled = true;
     };
   }, [threadId]);
+
+  useEffect(() => {
+    if (!reportToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setReportToast(null);
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [reportToast]);
 
   useEffect(() => {
     if (!thread) {
@@ -550,6 +750,7 @@ export default function ThreadPage() {
   const canReply = Boolean(user && token && !isClosed);
   const hasVotedInPoll = poll ? Boolean(hasVotedPollIds[poll.id]) : false;
   const canCreatePoll = Boolean(user && token && thread.author.id === user.id && !poll && !isClosed);
+  const canReportThread = Boolean(user && token && user.id !== thread.author.id);
 
   async function reloadPoll() {
     if (!threadId) {
@@ -596,6 +797,76 @@ export default function ThreadPage() {
       setReplyError(error instanceof Error ? error.message : "Unable to post reply.");
     } finally {
       setIsReplying(false);
+    }
+  }
+
+  function openReplyComposer(post: ThreadPost) {
+    if (!canReply) {
+      return;
+    }
+
+    setActiveReplyTargetPostId(post.id);
+    setReplyErrorsByPostId((current) => ({ ...current, [post.id]: null }));
+    setReplyDraftsByPostId((current) => {
+      const existingDraft = current[post.id];
+      if (typeof existingDraft === "string" && existingDraft.length > 0) {
+        return current;
+      }
+
+      const mentionPrefix = post.author?.username ? `@${post.author.username} ` : "";
+      return { ...current, [post.id]: mentionPrefix };
+    });
+  }
+
+  function closeReplyComposer(postId: string) {
+    setActiveReplyTargetPostId((current) => (current === postId ? null : current));
+    setReplyErrorsByPostId((current) => ({ ...current, [postId]: null }));
+  }
+
+  async function handleReplyToReplySubmit(postId: string, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canReply) {
+      setReplyErrorsByPostId((current) => ({
+        ...current,
+        [postId]: "Replies are currently unavailable.",
+      }));
+      return;
+    }
+
+    if (!token || !thread) {
+      setReplyErrorsByPostId((current) => ({
+        ...current,
+        [postId]: "You must be logged in to reply.",
+      }));
+      return;
+    }
+
+    const content = replyDraftsByPostId[postId] ?? "";
+
+    setReplyingPostIds((current) => ({ ...current, [postId]: true }));
+    setReplyErrorsByPostId((current) => ({ ...current, [postId]: null }));
+
+    try {
+      const createdPost = await createThreadReply(thread.id, token, { content, parentPostId: postId });
+
+      setThread((current) =>
+        current
+          ? {
+              ...current,
+              replies: sortPosts([...current.replies, createdPost]),
+            }
+          : current
+      );
+      setActiveReplyTargetPostId((current) => (current === postId ? null : current));
+      setReplyDraftsByPostId((current) => ({ ...current, [postId]: "" }));
+    } catch (error) {
+      setReplyErrorsByPostId((current) => ({
+        ...current,
+        [postId]: error instanceof Error ? error.message : "Unable to post reply.",
+      }));
+    } finally {
+      setReplyingPostIds((current) => ({ ...current, [postId]: false }));
     }
   }
 
@@ -688,6 +959,7 @@ export default function ThreadPage() {
           replies: current.replies.filter((reply) => reply.id !== postId),
         };
       });
+      setActiveReplyTargetPostId((current) => (current === postId ? null : current));
     } catch (error) {
       setEditErrors((current) => ({
         ...current,
@@ -844,6 +1116,77 @@ export default function ThreadPage() {
     }
   }
 
+  function openReportModal(targetType: ReportTargetType, targetId: string, targetAuthorId?: string | null) {
+    if (!token || !user) {
+      setReportToast({ tone: "error", message: "Log in to submit a report." });
+      return;
+    }
+
+    if (targetAuthorId && user.id === targetAuthorId) {
+      setReportToast({ tone: "error", message: "You cannot report your own content." });
+      return;
+    }
+
+    setActiveReportTarget({ targetType, targetId });
+    setReportReason(REPORT_REASON_OPTIONS[0]);
+    setReportDetails("");
+    setReportErrors({});
+  }
+
+  function closeReportModal() {
+    if (isSubmittingReport) {
+      return;
+    }
+
+    setActiveReportTarget(null);
+    setReportErrors({});
+  }
+
+  async function handleSubmitReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!activeReportTarget || !token) {
+      setReportErrors({ submit: "You must be logged in to submit a report." });
+      return;
+    }
+
+    const nextErrors: ReportFormErrors = {};
+    const trimmedDetails = reportDetails.trim();
+
+    if (reportReason === "Other" && !trimmedDetails) {
+      nextErrors.details = "Details are required when reason is Other.";
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setReportErrors(nextErrors);
+      return;
+    }
+
+    setIsSubmittingReport(true);
+    setReportErrors({});
+
+    try {
+      await createReport(token, {
+        targetType: activeReportTarget.targetType,
+        targetId: activeReportTarget.targetId,
+        reason: reportReason,
+        details: trimmedDetails || undefined,
+      });
+
+      setActiveReportTarget(null);
+      setReportReason(REPORT_REASON_OPTIONS[0]);
+      setReportDetails("");
+      setReportErrors({});
+      setReportToast({ tone: "success", message: "Report submitted successfully." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to submit report.";
+      setReportErrors({ submit: message });
+      setReportToast({ tone: "error", message });
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  }
+
   return (
     <section className="mx-auto max-w-4xl space-y-5">
       <header className="rounded-2xl border border-slate-300/80 bg-white/95 p-5 shadow-sm backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/80 dark:shadow-black/25 sm:p-6">
@@ -855,6 +1198,12 @@ export default function ThreadPage() {
             <ArrowLeftIcon className="h-3.5 w-3.5" />
             Back to Forums
           </Link>
+          {canReportThread ? (
+            <ReportOverflowMenu
+              onReport={() => openReportModal("THREAD", thread.id, thread.author.id)}
+              label="Thread options"
+            />
+          ) : null}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1088,6 +1437,21 @@ export default function ThreadPage() {
             onEditSubmit={(event) => submitEdit(thread.rootPost!.id, true, event)}
             onDelete={() => handleDelete(thread.rootPost!.id, true)}
             onToggleHistory={() => toggleHistory(thread.rootPost!.id)}
+            reportAction={{
+              canReport: Boolean(
+                user &&
+                  token &&
+                  thread.rootPost.author?.id &&
+                  user.id !== thread.rootPost.author.id
+              ),
+              isDisabled: Boolean(deletingPostIds[thread.rootPost.id] || savingPostIds[thread.rootPost.id]),
+              onReport: () =>
+                openReportModal(
+                  "POST",
+                  thread.rootPost!.id,
+                  thread.rootPost?.author?.id ?? null
+                ),
+            }}
           />
         ) : (
           <div className="rounded-2xl border border-slate-300/80 bg-white/85 p-6 text-sm text-slate-600 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/75 dark:text-slate-300 dark:shadow-black/20">
@@ -1129,6 +1493,26 @@ export default function ThreadPage() {
               onEditSubmit={(event) => submitEdit(post.id, false, event)}
               onDelete={() => handleDelete(post.id, false)}
               onToggleHistory={() => toggleHistory(post.id)}
+              replyAction={{
+                canReply,
+                isOpen: activeReplyTargetPostId === post.id,
+                draft: replyDraftsByPostId[post.id] ?? "",
+                error: replyErrorsByPostId[post.id] ?? null,
+                isSubmitting: Boolean(replyingPostIds[post.id]),
+                onOpen: () => openReplyComposer(post),
+                onCancel: () => closeReplyComposer(post.id),
+                onDraftChange: (value) =>
+                  setReplyDraftsByPostId((current) => ({
+                    ...current,
+                    [post.id]: value,
+                  })),
+                onSubmit: (event) => handleReplyToReplySubmit(post.id, event),
+              }}
+              reportAction={{
+                canReport: Boolean(user && token && post.author?.id && user.id !== post.author.id),
+                isDisabled: Boolean(deletingPostIds[post.id] || savingPostIds[post.id]),
+                onReport: () => openReportModal("POST", post.id, post.author?.id ?? null),
+              }}
             />
           ))
         ) : (
@@ -1168,6 +1552,42 @@ export default function ThreadPage() {
               : "Log in to reply to this thread."}
         </section>
       )}
+
+      <ReportModal
+        isOpen={Boolean(activeReportTarget)}
+        targetType={activeReportTarget?.targetType ?? "THREAD"}
+        reason={reportReason}
+        details={reportDetails}
+        errors={reportErrors}
+        isSubmitting={isSubmittingReport}
+        onReasonChange={(value) => {
+          setReportReason(value);
+          setReportErrors((current) => ({
+            ...current,
+            reason: undefined,
+            details: undefined,
+            submit: undefined,
+          }));
+        }}
+        onDetailsChange={(value) => {
+          setReportDetails(value);
+          setReportErrors((current) => ({
+            ...current,
+            details: undefined,
+            submit: undefined,
+          }));
+        }}
+        onClose={closeReportModal}
+        onSubmit={handleSubmitReport}
+      />
+
+      {reportToast ? (
+        <div className="fixed right-4 bottom-4 z-50 max-w-sm rounded-xl border border-slate-300/80 bg-white/95 px-4 py-3 text-sm shadow-lg dark:border-slate-700/70 dark:bg-slate-900/90">
+          <p className={reportToast.tone === "success" ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}>
+            {reportToast.message}
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }
