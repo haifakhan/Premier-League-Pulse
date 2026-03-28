@@ -91,17 +91,26 @@ function EllipsisHorizontalIcon({ className }: { className?: string }) {
   );
 }
 
-function ReportOverflowMenu({
-  onReport,
+type OverflowAction = {
+  key: string;
+  label: string;
+  onClick: () => void;
+  tone?: "default" | "danger";
+  disabled?: boolean;
+};
+
+function OverflowMenu({
   label,
+  actions,
   disabled = false,
 }: {
-  onReport: () => void;
   label: string;
+  actions: OverflowAction[];
   disabled?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const allActionsDisabled = actions.length === 0 || actions.every((action) => Boolean(action.disabled));
 
   useEffect(() => {
     if (!isOpen) {
@@ -136,7 +145,7 @@ function ReportOverflowMenu({
         aria-label={label}
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
-        disabled={disabled}
+        disabled={disabled || allActionsDisabled}
         className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300/80 bg-slate-100/80 text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
       >
         <EllipsisHorizontalIcon className="h-4 w-4" />
@@ -144,16 +153,28 @@ function ReportOverflowMenu({
 
       {isOpen ? (
         <div className="absolute right-0 z-30 mt-2 min-w-[140px] rounded-xl border border-slate-300/80 bg-white/95 p-1.5 shadow-lg dark:border-slate-700/70 dark:bg-slate-900/90">
-          <button
-            type="button"
-            onClick={() => {
-              setIsOpen(false);
-              onReport();
-            }}
-            className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-red-700 transition hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
-          >
-            Report
-          </button>
+          {actions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              onClick={() => {
+                if (action.disabled) {
+                  return;
+                }
+                setIsOpen(false);
+                action.onClick();
+              }}
+              disabled={action.disabled}
+              className={[
+                "w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition disabled:cursor-not-allowed disabled:text-slate-400 dark:disabled:text-slate-500",
+                action.tone === "danger"
+                  ? "text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+                  : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/90",
+              ].join(" ")}
+            >
+              {action.label}
+            </button>
+          ))}
         </div>
       ) : null}
     </div>
@@ -333,6 +354,36 @@ function PostCard({
   const isRoot = variant === "root";
   const canShowReplyButton = variant === "reply" && Boolean(replyAction?.canReply);
   const canShowReportButton = Boolean(reportAction?.canReport);
+  const postActions: OverflowAction[] = [];
+
+  if (canManage) {
+    postActions.push({
+      key: "edit",
+      label: isEditing ? "Cancel Edit" : "Edit",
+      onClick: isEditing ? onEditCancel : onEditStart,
+      disabled: isDeleting || isClosed,
+    });
+
+    postActions.push({
+      key: "delete",
+      label: isDeleting ? "Deleting..." : "Delete",
+      onClick: () => void onDelete(),
+      tone: "danger",
+      disabled: isDeleting || isSavingEdit || isClosed,
+    });
+  }
+
+  if (canShowReportButton) {
+    postActions.push({
+      key: "report",
+      label: "Report",
+      onClick: () => reportAction?.onReport(),
+      tone: "danger",
+      disabled: Boolean(reportAction?.isDisabled),
+    });
+  }
+
+  const canShowOverflowMenu = postActions.length > 0;
 
   return (
     <article
@@ -361,7 +412,7 @@ function PostCard({
           </div>
         </div>
 
-        {canManage || canShowReplyButton || canShowReportButton ? (
+        {canShowReplyButton || canShowOverflowMenu ? (
           <div className="flex gap-2">
             {canShowReplyButton ? (
               <button
@@ -373,29 +424,12 @@ function PostCard({
                 {replyAction?.isOpen ? "Cancel Reply" : "Reply"}
               </button>
             ) : null}
-            {canShowReportButton ? (
-              <ReportOverflowMenu
-                onReport={() => reportAction?.onReport()}
-                disabled={Boolean(reportAction?.isDisabled)}
-                label={`Report ${variant === "root" ? "post" : "reply"}`}
+            {canShowOverflowMenu ? (
+              <OverflowMenu
+                actions={postActions}
+                label={`${variant === "root" ? "Post" : "Reply"} options`}
               />
             ) : null}
-            <button
-              type="button"
-              onClick={isEditing ? onEditCancel : onEditStart}
-              disabled={isDeleting || isClosed}
-              className="rounded-full border border-slate-300/80 bg-slate-100/80 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
-            >
-              {isEditing ? "Cancel" : "Edit"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void onDelete()}
-              disabled={isDeleting || isSavingEdit || isClosed}
-              className="rounded-full border border-red-300/80 bg-red-50/80 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:border-red-400 hover:bg-red-100/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-red-500/60 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </button>
           </div>
         ) : null}
       </div>
@@ -1199,8 +1233,15 @@ export default function ThreadPage() {
             Back to Forums
           </Link>
           {canReportThread ? (
-            <ReportOverflowMenu
-              onReport={() => openReportModal("THREAD", thread.id, thread.author.id)}
+            <OverflowMenu
+              actions={[
+                {
+                  key: "report-thread",
+                  label: "Report",
+                  onClick: () => openReportModal("THREAD", thread.id, thread.author.id),
+                  tone: "danger",
+                },
+              ]}
               label="Thread options"
             />
           ) : null}
