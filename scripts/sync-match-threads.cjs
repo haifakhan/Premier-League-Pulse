@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-require("dotenv/config");
+const { config: loadEnv } = require("dotenv");
+
+loadEnv({ path: ".env.local", override: false });
+loadEnv({ path: ".env", override: false });
 
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
