@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   approveModerationItem,
@@ -184,6 +185,7 @@ export default function AdminModerationPage() {
           {queue.map((item) => {
             const actionState = actionById[item.id];
             const isBusy = Boolean(actionState?.isLoading);
+            const relatedThreadId = item.targetType === "THREAD" ? item.targetId : item.relatedThreadId;
 
             return (
               <article
@@ -195,13 +197,13 @@ export default function AdminModerationPage() {
                     {item.targetType}
                   </span>
                   <span className="rounded-full border border-sky-300/80 bg-sky-100 px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase text-sky-800 dark:border-sky-500/60 dark:bg-sky-500/15 dark:text-sky-200">
-                    AI {formatAiScore(item.aiScore)}
+                    AI confidence score: {formatAiScore(item.aiScore)}
                   </span>
                   <span className="rounded-full border border-slate-300/80 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase text-slate-700 dark:border-slate-600/70 dark:bg-slate-800/90 dark:text-slate-200">
-                    User Reports {item.pendingUserReportCount}
+                    User Reports: {item.pendingUserReportCount}
                   </span>
                   <span className="rounded-full border border-slate-300/80 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase text-slate-700 dark:border-slate-600/70 dark:bg-slate-800/90 dark:text-slate-200">
-                    Pending {item.pendingReportCount}
+                    Pending: {item.pendingReportCount}
                   </span>
                 </div>
 
@@ -213,6 +215,22 @@ export default function AdminModerationPage() {
                 </div>
 
                 <div className="mt-4 flex gap-3">
+                  {relatedThreadId ? (
+                    <Link
+                      href={`/forums/${relatedThreadId}`}
+                      className="rounded-full border border-slate-300/80 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 dark:border-slate-700/70 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+                    >
+                      View Thread
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="rounded-full border border-slate-300/80 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-400 dark:border-slate-700/70 dark:bg-slate-800 dark:text-slate-500"
+                    >
+                      Thread Unavailable
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => void handleAction(item, "approve")}

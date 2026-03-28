@@ -11,6 +11,7 @@ export type ModerationQueueItem = {
   latestReportedAt: string;
   pendingUserReportCount: number;
   pendingReportCount: number;
+  relatedThreadId: string | null;
   post: { content: string } | null;
   thread: { title: string } | null;
 };

@@ -40,6 +40,7 @@ export async function GET(request) {
           select: {
             id: true,
             content: true,
+            threadId: true,
           },
         },
         thread: {
@@ -71,6 +72,7 @@ export async function GET(request) {
         latestReportedAt: report.createdAt,
         pendingUserReportCount: 0,
         pendingReportCount: 0,
+        relatedThreadId: targetType === "THREAD" ? targetId : report.post?.threadId ?? null,
         post: targetType === "POST" ? { content: report.post?.content ?? "" } : null,
         thread: targetType === "THREAD" ? { title: report.thread?.title ?? "" } : null,
       };
@@ -94,6 +96,10 @@ export async function GET(request) {
       ) {
         existing.latestReportedAt = report.createdAt;
         existing.id = report.id;
+      }
+
+      if (!existing.relatedThreadId && report.post?.threadId) {
+        existing.relatedThreadId = report.post.threadId;
       }
 
       groupedByTarget.set(key, existing);
