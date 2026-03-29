@@ -47,6 +47,39 @@ type ReportToast = {
   message: string;
 };
 
+type TranslateApiResponse = {
+  translation?: {
+    translatedText?: string;
+  };
+  error?: string;
+};
+
+async function translatePostToEnglish(postId: string): Promise<string> {
+  const response = await fetch("/api/ai/translate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ postId }),
+  });
+
+  const data = (await response.json().catch(() => null)) as TranslateApiResponse | null;
+
+  if (!response.ok) {
+    if (data?.error && data.error.trim()) {
+      throw new Error(data.error);
+    }
+    throw new Error("Translation failed. Try again.");
+  }
+
+  const translatedText = data?.translation?.translatedText;
+  if (typeof translatedText !== "string" || translatedText.trim().length === 0) {
+    throw new Error("Translation failed. Try again.");
+  }
+
+  return translatedText.trim();
+}
+
 function formatTimestamp(value: string) {
   return new Intl.DateTimeFormat("en-CA", {
     dateStyle: "medium",
@@ -87,6 +120,28 @@ function EllipsisHorizontalIcon({ className }: { className?: string }) {
       <circle cx="6" cy="12" r="1.5" />
       <circle cx="12" cy="12" r="1.5" />
       <circle cx="18" cy="12" r="1.5" />
+    </svg>
+  );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={["animate-spin", className ?? ""].join(" ").trim()}>
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeWidth="3"
+        fill="none"
+        opacity="0.25"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -354,7 +409,45 @@ function PostCard({
   const isRoot = variant === "root";
   const canShowReplyButton = variant === "reply" && Boolean(replyAction?.canReply);
   const canShowReportButton = Boolean(reportAction?.canReport);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [isShowingOriginal, setIsShowingOriginal] = useState(false);
+  const [translationError, setTranslationError] = useState<string | null>(null);
   const postActions: OverflowAction[] = [];
+
+  useEffect(() => {
+    setIsTranslating(false);
+    setTranslatedText(null);
+    setIsShowingOriginal(false);
+    setTranslationError(null);
+  }, [post.id, post.content]);
+
+  const displayedContent = translatedText && !isShowingOriginal ? translatedText : post.content;
+
+  async function handleTranslate() {
+    if (isTranslating) {
+      return;
+    }
+
+    if (translatedText) {
+      setIsShowingOriginal(false);
+      setTranslationError(null);
+      return;
+    }
+
+    setIsTranslating(true);
+    setTranslationError(null);
+
+    try {
+      const translated = await translatePostToEnglish(post.id);
+      setTranslatedText(translated);
+      setIsShowingOriginal(false);
+    } catch {
+      setTranslationError("Translation failed. Try again.");
+    } finally {
+      setIsTranslating(false);
+    }
+  }
 
   if (canManage) {
     postActions.push({
@@ -469,9 +562,46 @@ function PostCard({
             isRoot ? "text-base leading-7" : "text-sm leading-6",
           ].join(" ")}
         >
-          {post.content}
+          {displayedContent}
         </div>
       )}
+
+      {!isEditing ? (
+        <div className="mt-2 flex flex-col items-start gap-1.5">
+          {isTranslating ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <SpinnerIcon className="h-3.5 w-3.5" />
+              Translating...
+            </span>
+          ) : translatedText ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {isShowingOriginal ? "Original" : "Translated"}{" "}
+              <span className="text-slate-400 dark:text-slate-500">·</span>{" "}
+              <button
+                type="button"
+                onClick={() => setIsShowingOriginal((current) => !current)}
+                className="font-medium text-slate-600 underline-offset-2 transition hover:underline hover:text-slate-700 dark:text-slate-300 dark:hover:text-slate-200"
+              >
+                {isShowingOriginal ? "Show translation" : "Show original"}
+              </button>
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleTranslate()}
+              disabled={isDeleting || isSavingEdit}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-500 transition hover:text-slate-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-400 dark:text-slate-400 dark:hover:text-slate-300 dark:disabled:text-slate-600"
+            >
+              <span aria-hidden="true">🌐</span>
+              Translate
+            </button>
+          )}
+
+          {translationError ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">{translationError}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {replyAction?.isOpen && replyAction.canReply ? (
         <form
