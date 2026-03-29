@@ -541,17 +541,18 @@ function MatchesPageContent({ initialStatusFilter }: MatchesPageContentProps) {
 
   return (
     <div className="space-y-8">
-      <section className="relative left-1/2 right-1/2 -mx-[50vw] w-screen border-y border-slate-200 bg-gradient-to-r from-slate-100 via-white to-slate-100 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <section className="relative left-1/2 right-1/2 -mx-[50vw] w-screen overflow-hidden border-y border-slate-200 bg-[url('/pl.jpg')] bg-cover bg-[center_28%] dark:border-slate-800">
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/75" />
+        <div className="relative mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="flex items-start gap-4">
             <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-600 dark:bg-sky-700/20 dark:text-sky-300">
               <CalendarIcon className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 sm:text-4xl">
+              <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">
                 Matches List
               </h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600 dark:text-slate-300 sm:text-base">
+              <p className="mt-2 max-w-3xl text-sm text-slate-100 sm:text-base">
                 Explore all matchdays, switch between upcoming and completed fixtures, and open any match
                 for details.
               </p>

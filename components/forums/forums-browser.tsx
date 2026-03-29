@@ -214,7 +214,6 @@ function ThreadCard({
             </span>
             <span>{formatTimestamp(thread.createdAt)}</span>
             <span>{repliesCount} replies</span>
-            <span>Views —</span>
           </footer>
         </div>
       </div>
@@ -627,30 +626,32 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
           </SidebarCard>
 
           <SidebarCard title="Popular Tags" icon={<TagIcon className="h-4 w-4" />}>
-            <div className="flex flex-wrap gap-2">
-              {popularTags.length > 0 ? (
-                popularTags.map((entry) => {
-                  const isSelected = selectedTag === entry.tag;
-                  return (
-                    <button
-                      key={entry.tag}
-                      type="button"
-                      onClick={() => setSelectedTag((current) => (current === entry.tag ? null : entry.tag))}
-                      className={[
-                        "rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                        isSelected
-                          ? "border-sky-400/70 bg-sky-100/80 text-sky-800 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200"
-                          : "border-slate-300/80 bg-slate-100/70 text-slate-700 hover:border-slate-400/80 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-slate-600",
-                      ].join(" ")}
-                    >
-                      #{entry.tag} ({entry.count})
-                    </button>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-slate-500 dark:text-slate-400">No tags yet.</p>
-              )}
-            </div>
+            {popularTags.length > 0 ? (
+              <div className="max-h-[190px] overflow-y-auto pr-1">
+                <div className="flex flex-wrap gap-2">
+                  {popularTags.map((entry) => {
+                    const isSelected = selectedTag === entry.tag;
+                    return (
+                      <button
+                        key={entry.tag}
+                        type="button"
+                        onClick={() => setSelectedTag((current) => (current === entry.tag ? null : entry.tag))}
+                        className={[
+                          "rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                          isSelected
+                            ? "border-sky-400/70 bg-sky-100/80 text-sky-800 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200"
+                            : "border-slate-300/80 bg-slate-100/70 text-slate-700 hover:border-slate-400/80 dark:border-slate-700/70 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:border-slate-600",
+                        ].join(" ")}
+                      >
+                        #{entry.tag} ({entry.count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">No tags yet.</p>
+            )}
           </SidebarCard>
         </aside>
 
@@ -765,23 +766,29 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
                   <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
                     Popular Tags
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {popularTags.slice(0, 10).map((entry) => (
-                      <button
-                        key={entry.tag}
-                        type="button"
-                        onClick={() => setSelectedTag((current) => (current === entry.tag ? null : entry.tag))}
-                        className={[
-                          "rounded-full border px-3 py-1.5 text-xs font-medium transition",
-                          selectedTag === entry.tag
-                            ? "border-sky-400/70 bg-sky-100/80 text-sky-800 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200"
-                            : "border-slate-300/80 bg-white/80 text-slate-700 dark:border-slate-700/70 dark:bg-slate-900/70 dark:text-slate-200",
-                        ].join(" ")}
-                      >
-                        #{entry.tag}
-                      </button>
-                    ))}
-                  </div>
+                  {popularTags.length > 0 ? (
+                    <div className="max-w-full overflow-x-auto pb-1">
+                      <div className="flex min-w-max gap-2">
+                        {popularTags.map((entry) => (
+                          <button
+                            key={entry.tag}
+                            type="button"
+                            onClick={() => setSelectedTag((current) => (current === entry.tag ? null : entry.tag))}
+                            className={[
+                              "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition",
+                              selectedTag === entry.tag
+                                ? "border-sky-400/70 bg-sky-100/80 text-sky-800 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200"
+                                : "border-slate-300/80 bg-white/80 text-slate-700 dark:border-slate-700/70 dark:bg-slate-900/70 dark:text-slate-200",
+                            ].join(" ")}
+                          >
+                            #{entry.tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500 dark:text-slate-400">No tags yet.</p>
+                  )}
                 </div>
               </div>
             ) : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/context/auth";
@@ -53,8 +54,15 @@ export default function AuthNavbar() {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-5">
-          <Link href="/" className="text-sm font-semibold tracking-wide text-sky-700">
-            PP2
+          <Link href="/" aria-label="Home" className="inline-flex items-center">
+            <Image
+              src="/pllogo.png"
+              alt="Premier League logo"
+              width={140}
+              height={44}
+              className="h-11 w-auto object-contain"
+              priority
+            />
           </Link>
           <nav className="hidden items-center gap-1 sm:flex">
             <Link href="/" className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">
