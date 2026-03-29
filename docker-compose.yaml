@@ -26,6 +26,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - avatar_uploads:/app/public/uploads
     expose:
       - "3000"
 
@@ -56,3 +58,4 @@ services:
 
 volumes:
   postgres_data:
+  avatar_uploads:
