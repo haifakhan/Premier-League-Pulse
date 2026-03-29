@@ -8,8 +8,10 @@ import {
   followUser,
   getMyFollowers,
   getMyFollowing,
+  getMyPolls,
   getPublicUserActivity,
   getPublicUserProfile,
+  type OwnedPoll,
   type PublicUserActivityPoint,
   removeFollower,
   type PublicUserPost,
@@ -235,11 +237,14 @@ export default function UserProfilePage() {
   const [activity, setActivity] = useState<ActivityPoint[]>([]);
   const [followers, setFollowers] = useState<UserListItem[]>([]);
   const [following, setFollowing] = useState<UserListItem[]>([]);
+  const [ownedPolls, setOwnedPolls] = useState<OwnedPoll[]>([]);
   const [isFollowingProfile, setIsFollowingProfile] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [isLoadingSocial, setIsLoadingSocial] = useState(false);
+  const [isLoadingPolls, setIsLoadingPolls] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [socialError, setSocialError] = useState<string | null>(null);
+  const [pollsError, setPollsError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmittingFollow, setIsSubmittingFollow] = useState(false);
   const [removingFollowerId, setRemovingFollowerId] = useState<string | null>(null);
@@ -301,8 +306,11 @@ export default function UserProfilePage() {
     if (!user || !token) {
       setFollowers([]);
       setFollowing([]);
+      setOwnedPolls([]);
       setIsFollowingProfile(false);
       setSocialError(null);
+      setPollsError(null);
+      setIsLoadingPolls(false);
       return;
     }
 
@@ -313,12 +321,16 @@ export default function UserProfilePage() {
     async function loadSocialState() {
       setIsLoadingSocial(true);
       setSocialError(null);
+      setPollsError(null);
 
       try {
         if (authUser.id === userId) {
-          const [nextFollowers, nextFollowing] = await Promise.all([
+          setIsLoadingPolls(true);
+
+          const [nextFollowers, nextFollowing, nextPolls] = await Promise.all([
             getMyFollowers(authToken),
             getMyFollowing(authToken),
+            getMyPolls(authToken),
           ]);
 
           if (cancelled) {
@@ -327,6 +339,7 @@ export default function UserProfilePage() {
 
           setFollowers(sortByFollowTime(nextFollowers));
           setFollowing(sortByFollowTime(nextFollowing));
+          setOwnedPolls(nextPolls);
           setIsFollowingProfile(false);
           return;
         }
@@ -339,17 +352,23 @@ export default function UserProfilePage() {
 
         setFollowers([]);
         setFollowing([]);
+        setOwnedPolls([]);
         setIsFollowingProfile(nextFollowing.some((entry) => entry.id === userId));
       } catch (error) {
         if (!cancelled) {
           setFollowers([]);
           setFollowing([]);
+          setOwnedPolls([]);
           setIsFollowingProfile(false);
           setSocialError(error instanceof Error ? error.message : "Unable to load social data.");
+          if (authUser.id === userId) {
+            setPollsError(error instanceof Error ? error.message : "Unable to load your polls.");
+          }
         }
       } finally {
         if (!cancelled) {
           setIsLoadingSocial(false);
+          setIsLoadingPolls(false);
         }
       }
     }
@@ -490,7 +509,7 @@ export default function UserProfilePage() {
                 type="button"
                 onClick={() => void handleFollowToggle()}
                 disabled={isSubmittingFollow || isLoadingSocial || isFollowBlockedByBan}
-                className="rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="cursor-pointer rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
                 {isSubmittingFollow ? "Updating..." : isFollowingProfile ? "Unfollow" : "Follow"}
               </button>
@@ -666,7 +685,7 @@ export default function UserProfilePage() {
                       type="button"
                       onClick={() => void handleRemoveFollower(follower.id)}
                       disabled={removingFollowerId === follower.id}
-                      className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                      className="cursor-pointer rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                     >
                       {removingFollowerId === follower.id ? "Removing..." : "Remove"}
                     </button>
@@ -714,6 +733,42 @@ export default function UserProfilePage() {
             </div>
           </section>
         </div>
+      ) : null}
+
+      {isOwnProfile ? (
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-xl font-semibold text-slate-900">My Polls</h2>
+            <span className="text-sm text-slate-500">{ownedPolls.length}</span>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {isLoadingPolls ? (
+              <p className="text-sm text-slate-600">Loading your polls...</p>
+            ) : pollsError ? (
+              <p className="text-sm text-red-600">{pollsError}</p>
+            ) : ownedPolls.length ? (
+              ownedPolls.map((poll) => (
+                <article key={poll.id} className="rounded-2xl border border-slate-200 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-700">
+                      Poll
+                    </span>
+                    <Link href={`/forums/${poll.threadId}`} className="text-sky-700 hover:text-sky-600">
+                      In {poll.threadTitle}
+                    </Link>
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-slate-900">{poll.question}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Deadline {formatTimestamp(poll.deadline)} • {poll.totalVotes} vote{poll.totalVotes === 1 ? "" : "s"}
+                  </p>
+                </article>
+              ))
+            ) : (
+              <p className="text-sm text-slate-600">You have not created any polls yet.</p>
+            )}
+          </div>
+        </section>
       ) : null}
     </section>
   );

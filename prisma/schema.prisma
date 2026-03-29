@@ -64,6 +64,7 @@ model User {
   following      Follow[]        @relation("FollowFollower")
   followers      Follow[]        @relation("FollowFollowing")
   pollVotes      PollVote[]
+  polls          Poll[]          @relation("PollCreator")
   reports        Report[]
   appeals        Appeal[]        @relation("AppealUser")
   reviewedAppeals Appeal[]       @relation("AppealReviewer")
@@ -190,16 +191,20 @@ model PostRevision {
 }
 
 model Poll {
-  id        String   @id @default(cuid())
-  threadId  String   @unique
-  question  String
-  deadline  DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  threadId        String   @unique
+  createdByUserId String
+  question        String
+  deadline        DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  thread  Thread       @relation(fields: [threadId], references: [id])
-  options PollOption[]
-  votes   PollVote[]
+  thread        Thread       @relation(fields: [threadId], references: [id])
+  createdByUser User         @relation("PollCreator", fields: [createdByUserId], references: [id])
+  options       PollOption[]
+  votes         PollVote[]
+
+  @@index([createdByUserId])
 }
 
 model PollOption {

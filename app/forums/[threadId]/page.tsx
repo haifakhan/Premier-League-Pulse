@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   createThreadPoll,
   createThreadReply,
+  deletePoll,
   deletePost,
+  deleteThread,
   getMatchThreadSentiment,
   getPostRevisions,
   getThread,
@@ -18,7 +20,9 @@ import {
   ThreadDetail,
   ThreadPoll,
   ThreadPost,
+  updatePoll,
   updatePost,
+  updateThread,
   voteInPoll,
 } from "@/lib/api/threads";
 import { createReport, REPORT_REASON_OPTIONS, type ReportReason, type ReportTargetType } from "@/lib/api/reports";
@@ -231,7 +235,7 @@ function OverflowMenu({
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
         disabled={disabled || allActionsDisabled}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300/80 bg-slate-100/80 text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+        className="cursor-pointer inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300/80 bg-slate-100/80 text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
       >
         <EllipsisHorizontalIcon className="h-4 w-4" />
       </button>
@@ -287,6 +291,7 @@ function normalizeCreatedPoll(
   return {
     id: poll.id,
     threadId: poll.threadId ?? threadId,
+    createdByUserId: poll.createdByUserId ?? "",
     question: poll.question,
     deadline: poll.deadline,
     createdAt,
@@ -360,7 +365,7 @@ function PollCard({
                   type="button"
                   onClick={() => onVote(option.id)}
                   disabled={isSubmittingVote}
-                  className="rounded-full border border-sky-400/70 bg-sky-100/80 px-4 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-500 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200 dark:hover:bg-sky-500/30 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-400"
+                  className="cursor-pointer rounded-full border border-sky-400/70 bg-sky-100/80 px-4 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-200 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-500 dark:border-sky-500/60 dark:bg-sky-500/20 dark:text-sky-200 dark:hover:bg-sky-500/30 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-400"
                 >
                   {isSubmittingVote ? "Submitting..." : "Vote"}
                 </button>
@@ -542,7 +547,7 @@ function PostCard({
                 type="button"
                 onClick={replyAction?.isOpen ? replyAction.onCancel : replyAction?.onOpen}
                 disabled={isDeleting || isSavingEdit || isClosed || isEditing || Boolean(replyAction?.isSubmitting)}
-                className="rounded-full border border-sky-300/80 bg-sky-100/80 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:border-sky-400 hover:bg-sky-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-sky-500/60 dark:bg-sky-500/15 dark:text-sky-200 dark:hover:bg-sky-500/25 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                className="cursor-pointer rounded-full border border-sky-300/80 bg-sky-100/80 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:border-sky-400 hover:bg-sky-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-sky-500/60 dark:bg-sky-500/15 dark:text-sky-200 dark:hover:bg-sky-500/25 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
               >
                 {replyAction?.isOpen ? "Cancel Reply" : "Reply"}
               </button>
@@ -650,7 +655,7 @@ function PostCard({
             <button
               type="submit"
               disabled={replyAction.isSubmitting}
-              className="rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
+              className="cursor-pointer rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
             >
               {replyAction.isSubmitting ? "Posting..." : "Post Reply"}
             </button>
@@ -716,6 +721,7 @@ function PostCard({
 }
 
 export default function ThreadPage() {
+  const router = useRouter();
   const params = useParams<{ threadId: string }>();
   const threadId = params?.threadId ?? "";
   const { user, token, isLoading: isAuthLoading } = useAuth();
@@ -735,6 +741,14 @@ export default function ThreadPage() {
   const [activeEditPostId, setActiveEditPostId] = useState<string | null>(null);
   const [editDrafts, setEditDrafts] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string | null>>({});
+  const [isEditingThread, setIsEditingThread] = useState(false);
+  const [threadForm, setThreadForm] = useState({
+    title: "",
+    content: "",
+  });
+  const [threadFormError, setThreadFormError] = useState<string | null>(null);
+  const [isSavingThread, setIsSavingThread] = useState(false);
+  const [isDeletingThread, setIsDeletingThread] = useState(false);
   const [savingPostIds, setSavingPostIds] = useState<Record<string, boolean>>({});
   const [deletingPostIds, setDeletingPostIds] = useState<Record<string, boolean>>({});
   const [revisionStates, setRevisionStates] = useState<Record<string, RevisionState>>({});
@@ -754,6 +768,20 @@ export default function ThreadPage() {
   }>({});
   const [pollFormError, setPollFormError] = useState<string | null>(null);
   const [isCreatingPoll, setIsCreatingPoll] = useState(false);
+  const [isEditingPoll, setIsEditingPoll] = useState(false);
+  const [pollEditForm, setPollEditForm] = useState({
+    question: "",
+    deadline: "",
+    options: ["", ""],
+  });
+  const [pollEditFormErrors, setPollEditFormErrors] = useState<{
+    question?: string;
+    deadline?: string;
+    options?: string;
+  }>({});
+  const [pollEditError, setPollEditError] = useState<string | null>(null);
+  const [isSavingPoll, setIsSavingPoll] = useState(false);
+  const [isDeletingPoll, setIsDeletingPoll] = useState(false);
   const [activeReportTarget, setActiveReportTarget] = useState<ReportTarget | null>(null);
   const [reportReason, setReportReason] = useState<ReportReason>(REPORT_REASON_OPTIONS[0]);
   const [reportDetails, setReportDetails] = useState("");
@@ -816,6 +844,14 @@ export default function ThreadPage() {
         setActiveEditPostId(null);
         setEditDrafts({});
         setEditErrors({});
+        setIsEditingThread(false);
+        setThreadForm({
+          title: threadData.title,
+          content: threadData.rootPost?.content ?? "",
+        });
+        setThreadFormError(null);
+        setIsSavingThread(false);
+        setIsDeletingThread(false);
         setDeletingPostIds({});
         setSavingPostIds({});
         setRevisionStates({});
@@ -827,6 +863,16 @@ export default function ThreadPage() {
         });
         setPollFormErrors({});
         setPollFormError(null);
+        setIsEditingPoll(false);
+        setPollEditForm({
+          question: pollData?.question ?? "",
+          deadline: pollData ? toDateTimeLocalValue(pollData.deadline) : "",
+          options: pollData?.options?.map((option) => option.text) ?? ["", ""],
+        });
+        setPollEditFormErrors({});
+        setPollEditError(null);
+        setIsSavingPoll(false);
+        setIsDeletingPoll(false);
         setActiveReportTarget(null);
         setReportReason(REPORT_REASON_OPTIONS[0]);
         setReportDetails("");
@@ -1041,10 +1087,14 @@ export default function ThreadPage() {
   const canReply = Boolean(user && token && !isClosed);
   const hasVotedInPoll = poll ? Boolean(hasVotedPollIds[poll.id]) : false;
   const canCreatePoll = Boolean(user && token && thread.author.id === user.id && !poll && !isClosed);
+  const canManageThread = Boolean(user && token && user.id === thread.author.id);
+  const canManagePoll = Boolean(user && token && poll && user.id === poll.createdByUserId);
   const canReportThread = Boolean(user && token && user.id !== thread.author.id);
   const isMatchThread = Boolean(thread.matchId);
   const hasGeneratedSentiment = Boolean(matchSentiment?.generatedAt && matchSentiment.commentCount > 0);
   const overallSentiment = toSentimentLabel(matchSentiment?.overall);
+  const currentThread = thread;
+  const rootPost = currentThread.rootPost;
 
   async function reloadPoll() {
     if (!threadId) {
@@ -1061,6 +1111,81 @@ export default function ThreadPage() {
       }
 
       throw error;
+    }
+  }
+
+  function cancelThreadEditing() {
+    setIsEditingThread(false);
+    setThreadForm({
+      title: currentThread.title,
+      content: rootPost?.content ?? "",
+    });
+    setThreadFormError(null);
+  }
+
+  async function handleThreadUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!token || !rootPost) {
+      setThreadFormError("Thread editing is unavailable right now.");
+      return;
+    }
+
+    const title = threadForm.title.trim();
+    const content = threadForm.content.trim();
+
+    if (!title || !content) {
+      setThreadFormError("Thread title and main post content are required.");
+      return;
+    }
+
+    setIsSavingThread(true);
+    setThreadFormError(null);
+
+    try {
+      const updatedThread = await updateThread(currentThread.id, token, { title, content });
+      setThread((current) =>
+        current
+          ? {
+              ...current,
+              title: updatedThread.title,
+              rootPost: updatedThread.rootPost ?? current.rootPost,
+            }
+          : current
+      );
+
+      const refreshedRevisions = await getPostRevisions(rootPost.id);
+      setRevisionStates((current) => ({
+        ...current,
+        [rootPost.id]: {
+          isLoading: false,
+          error: null,
+          isOpen: current[rootPost.id]?.isOpen ?? false,
+          revisions: refreshedRevisions,
+        },
+      }));
+      setIsEditingThread(false);
+    } catch (error) {
+      setThreadFormError(error instanceof Error ? error.message : "Unable to update thread.");
+    } finally {
+      setIsSavingThread(false);
+    }
+  }
+
+  async function handleThreadDelete() {
+    if (!token) {
+      return;
+    }
+
+    setIsDeletingThread(true);
+    setThreadFormError(null);
+
+    try {
+      await deleteThread(currentThread.id, token);
+      router.push("/forums");
+    } catch (error) {
+      setIsDeletingThread(false);
+      setThreadFormError(error instanceof Error ? error.message : "Unable to delete thread.");
     }
   }
 
@@ -1390,7 +1515,7 @@ export default function ThreadPage() {
   async function handleCreatePoll(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!token || !thread) {
+    if (!token) {
       setPollFormError("You must be logged in to create a poll.");
       return;
     }
@@ -1403,19 +1528,159 @@ export default function ThreadPage() {
     setPollFormError(null);
 
     try {
-      const createdPoll = await createThreadPoll(thread.id, token, {
+      const createdPoll = await createThreadPoll(currentThread.id, token, {
         question: pollForm.question.trim(),
         deadline: new Date(pollForm.deadline).toISOString(),
         options: pollForm.options.map((option) => option.trim()).filter(Boolean),
       });
 
-      setPoll(normalizeCreatedPoll(thread.id, createdPoll));
+      setPoll(normalizeCreatedPoll(currentThread.id, createdPoll));
+      setPollEditForm({
+        question: createdPoll.question,
+        deadline: toDateTimeLocalValue(createdPoll.deadline),
+        options: createdPoll.options.map((option) => option.text),
+      });
       resetPollForm();
     } catch (error) {
       setPollFormError(error instanceof Error ? error.message : "Unable to create poll.");
     } finally {
       setIsCreatingPoll(false);
     }
+  }
+
+  function cancelPollEditing() {
+    setIsEditingPoll(false);
+    setPollEditForm({
+      question: poll?.question ?? "",
+      deadline: poll ? toDateTimeLocalValue(poll.deadline) : "",
+      options: poll?.options.map((option) => option.text) ?? ["", ""],
+    });
+    setPollEditFormErrors({});
+    setPollEditError(null);
+  }
+
+  function validatePollEditForm() {
+    const cleanedOptions = pollEditForm.options.map((option) => option.trim()).filter(Boolean);
+    const nextErrors: typeof pollEditFormErrors = {};
+
+    if (!pollEditForm.question.trim()) {
+      nextErrors.question = "Poll question is required.";
+    }
+
+    if (!pollEditForm.deadline) {
+      nextErrors.deadline = "A deadline is required.";
+    } else if (new Date(pollEditForm.deadline).getTime() <= Date.now()) {
+      nextErrors.deadline = "Deadline must be in the future.";
+    }
+
+    if (cleanedOptions.length < 2) {
+      nextErrors.options = "Enter at least 2 poll options.";
+    }
+
+    setPollEditFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  async function handlePollUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!poll || !token) {
+      setPollEditError("Poll editing is unavailable right now.");
+      return;
+    }
+
+    if (!validatePollEditForm()) {
+      return;
+    }
+
+    setIsSavingPoll(true);
+    setPollEditError(null);
+
+    try {
+      const updatedPoll = await updatePoll(poll.id, token, {
+        question: pollEditForm.question.trim(),
+        deadline: new Date(pollEditForm.deadline).toISOString(),
+        options: pollEditForm.options.map((option) => option.trim()).filter(Boolean),
+      });
+
+      setPoll(updatedPoll);
+      setPollEditForm({
+        question: updatedPoll.question,
+        deadline: toDateTimeLocalValue(updatedPoll.deadline),
+        options: updatedPoll.options.map((option) => option.text),
+      });
+      setIsEditingPoll(false);
+    } catch (error) {
+      setPollEditError(error instanceof Error ? error.message : "Unable to update poll.");
+    } finally {
+      setIsSavingPoll(false);
+    }
+  }
+
+  async function handlePollDelete() {
+    if (!poll || !token) {
+      return;
+    }
+
+    setIsDeletingPoll(true);
+    setPollEditError(null);
+
+    try {
+      await deletePoll(poll.id, token);
+      setPoll(null);
+      setIsEditingPoll(false);
+      setPollEditForm({
+        question: "",
+        deadline: "",
+        options: ["", ""],
+      });
+    } catch (error) {
+      setPollEditError(error instanceof Error ? error.message : "Unable to delete poll.");
+      setIsDeletingPoll(false);
+      return;
+    }
+
+    setIsDeletingPoll(false);
+  }
+
+  const threadActions: OverflowAction[] = [];
+
+  if (canManageThread) {
+    threadActions.push({
+      key: "edit-thread",
+      label: isEditingThread ? "Cancel Edit" : "Edit Thread",
+      onClick: () => {
+        if (isEditingThread) {
+          cancelThreadEditing();
+          return;
+        }
+
+        setIsEditingThread(true);
+        setThreadForm({
+          title: currentThread.title,
+          content: rootPost?.content ?? "",
+        });
+        setThreadFormError(null);
+      },
+      disabled: isSavingThread || isDeletingThread || isClosed || !rootPost,
+    });
+
+    threadActions.push({
+      key: "delete-thread",
+      label: isDeletingThread ? "Deleting..." : "Delete Thread",
+      onClick: () => void handleThreadDelete(),
+      tone: "danger",
+      disabled: isDeletingThread || isSavingThread,
+    });
+  }
+
+  if (canReportThread) {
+    threadActions.push({
+      key: "report-thread",
+      label: "Report",
+      onClick: () => openReportModal("THREAD", currentThread.id, currentThread.author.id),
+      tone: "danger",
+    });
   }
 
   function openReportModal(targetType: ReportTargetType, targetId: string, targetAuthorId?: string | null) {
@@ -1500,16 +1765,9 @@ export default function ThreadPage() {
             <ArrowLeftIcon className="h-3.5 w-3.5" />
             Back to Forums
           </Link>
-          {canReportThread ? (
+          {canManageThread || canReportThread ? (
             <OverflowMenu
-              actions={[
-                {
-                  key: "report-thread",
-                  label: "Report",
-                  onClick: () => openReportModal("THREAD", thread.id, thread.author.id),
-                  tone: "danger",
-                },
-              ]}
+              actions={threadActions}
               label="Thread options"
             />
           ) : null}
@@ -1566,6 +1824,59 @@ export default function ThreadPage() {
           <div className="mt-4 rounded-xl border border-amber-300/80 bg-amber-100/80 px-4 py-3 text-sm text-amber-800 dark:border-amber-600/70 dark:bg-amber-900/20 dark:text-amber-200">
             This thread is closed. New replies are not available right now.
           </div>
+        ) : null}
+
+        {isEditingThread ? (
+          <form onSubmit={(event) => void handleThreadUpdate(event)} className="mt-5 space-y-4 rounded-2xl border border-slate-300/80 bg-slate-100/70 p-4 dark:border-slate-700/70 dark:bg-slate-800/70">
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Thread Title</span>
+              <input
+                type="text"
+                value={threadForm.title}
+                onChange={(event) => {
+                  setThreadForm((current) => ({ ...current, title: event.target.value }));
+                  setThreadFormError(null);
+                }}
+                className="w-full rounded-xl border border-slate-300/80 bg-white/90 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-sky-500"
+                required
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Main Post</span>
+              <textarea
+                value={threadForm.content}
+                onChange={(event) => {
+                  setThreadForm((current) => ({ ...current, content: event.target.value }));
+                  setThreadFormError(null);
+                }}
+                className="min-h-32 w-full rounded-xl border border-slate-300/80 bg-white/90 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-900/80 dark:text-slate-100 dark:focus:border-sky-500"
+                required
+              />
+            </label>
+
+            {threadFormError ? <p className="text-sm text-red-600 dark:text-red-300">{threadFormError}</p> : null}
+
+            <div className="flex gap-3">
+              <button
+                type="submit"
+                disabled={isSavingThread}
+                className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
+              >
+                {isSavingThread ? "Saving..." : "Save Thread"}
+              </button>
+              <button
+                type="button"
+                onClick={cancelThreadEditing}
+                disabled={isSavingThread}
+                className="rounded-full border border-slate-300/80 bg-slate-100/80 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:text-slate-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : threadFormError ? (
+          <p className="mt-4 text-sm text-red-600 dark:text-red-300">{threadFormError}</p>
         ) : null}
       </header>
 
@@ -1628,14 +1939,181 @@ export default function ThreadPage() {
       ) : null}
 
       {poll ? (
-        <PollCard
-          poll={poll}
-          isLoggedIn={Boolean(user && token)}
-          hasVoted={hasVotedInPoll}
-          isSubmittingVote={isSubmittingVote}
-          voteError={voteError}
-          onVote={handleVote}
-        />
+        <div className="space-y-4">
+          <PollCard
+            poll={poll}
+            isLoggedIn={Boolean(user && token)}
+            hasVoted={hasVotedInPoll}
+            isSubmittingVote={isSubmittingVote}
+            voteError={voteError}
+            onVote={handleVote}
+          />
+
+          {canManagePoll ? (
+            <section className="rounded-2xl border border-dashed border-slate-300/80 bg-white/90 p-5 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/75 dark:shadow-black/20">
+              {!isEditingPoll ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Manage Poll</h2>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      Update your poll question, deadline, or options, or remove the poll.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingPoll(true);
+                        setPollEditForm({
+                          question: poll.question,
+                          deadline: toDateTimeLocalValue(poll.deadline),
+                          options: poll.options.map((option) => option.text),
+                        });
+                        setPollEditError(null);
+                        setPollEditFormErrors({});
+                      }}
+                      className="cursor-pointer rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
+                    >
+                      Edit Poll
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handlePollDelete()}
+                      disabled={isDeletingPoll}
+                      className="cursor-pointer rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
+                    >
+                      {isDeletingPoll ? "Deleting..." : "Delete Poll"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={(event) => void handlePollUpdate(event)} className="space-y-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Edit Poll</h2>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      You can update the poll while the thread is still open.
+                    </p>
+                  </div>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Question</span>
+                    <input
+                      type="text"
+                      value={pollEditForm.question}
+                      onChange={(event) => {
+                        setPollEditForm((current) => ({ ...current, question: event.target.value }));
+                        setPollEditError(null);
+                        setPollEditFormErrors((current) => ({ ...current, question: undefined }));
+                      }}
+                      className="w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
+                      required
+                    />
+                    {pollEditFormErrors.question ? (
+                      <p className="text-sm text-red-600 dark:text-red-300">{pollEditFormErrors.question}</p>
+                    ) : null}
+                  </label>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Options</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPollEditForm((current) => ({
+                            ...current,
+                            options: [...current.options, ""],
+                          }))
+                        }
+                        className="cursor-pointer rounded-full border border-slate-300/80 bg-slate-100/80 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80"
+                      >
+                        Add option
+                      </button>
+                    </div>
+
+                    {pollEditForm.options.map((option, index) => (
+                      <div key={`poll-edit-option-${index}`} className="flex gap-3">
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(event) => {
+                            setPollEditForm((current) => ({
+                              ...current,
+                              options: current.options.map((entry, entryIndex) =>
+                                entryIndex === index ? event.target.value : entry
+                              ),
+                            }));
+                            setPollEditError(null);
+                            setPollEditFormErrors((current) => ({ ...current, options: undefined }));
+                          }}
+                          className="w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
+                          placeholder={`Option ${index + 1}`}
+                          required={index < 2}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPollEditForm((current) => ({
+                              ...current,
+                              options: current.options.filter((_, entryIndex) => entryIndex !== index),
+                            }))
+                          }
+                          disabled={pollEditForm.options.length <= 2}
+                          className="cursor-pointer rounded-full border border-slate-300/80 bg-slate-100/80 px-4 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:border-slate-300/70 disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:border-slate-700/70 dark:disabled:bg-slate-800 dark:disabled:text-slate-500"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+
+                    {pollEditFormErrors.options ? (
+                      <p className="text-sm text-red-600 dark:text-red-300">{pollEditFormErrors.options}</p>
+                    ) : null}
+                  </div>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Deadline</span>
+                    <input
+                      type="datetime-local"
+                      value={pollEditForm.deadline}
+                      min={toDateTimeLocalValue(new Date().toISOString())}
+                      onChange={(event) => {
+                        setPollEditForm((current) => ({ ...current, deadline: event.target.value }));
+                        setPollEditError(null);
+                        setPollEditFormErrors((current) => ({ ...current, deadline: undefined }));
+                      }}
+                      className="w-full rounded-xl border border-slate-300/80 bg-slate-100/70 px-4 py-3 text-slate-900 outline-none transition focus:border-sky-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:border-sky-500"
+                      required
+                    />
+                    {pollEditFormErrors.deadline ? (
+                      <p className="text-sm text-red-600 dark:text-red-300">{pollEditFormErrors.deadline}</p>
+                    ) : null}
+                  </label>
+
+                  {pollEditError ? <p className="text-sm text-red-600 dark:text-red-300">{pollEditError}</p> : null}
+
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      disabled={isSavingPoll}
+                      className="cursor-pointer rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
+                    >
+                      {isSavingPoll ? "Saving..." : "Save Poll"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelPollEditing}
+                      disabled={isSavingPoll}
+                      className="cursor-pointer rounded-full border border-slate-300/80 bg-slate-100/80 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-200/80 disabled:cursor-not-allowed disabled:text-slate-400 dark:border-slate-700/70 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-700/80 dark:disabled:text-slate-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </section>
+          ) : null}
+        </div>
       ) : canCreatePoll ? (
         <section className="rounded-2xl border border-dashed border-slate-300/80 bg-white/90 p-5 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/75 dark:shadow-black/20 sm:p-6">
           {!showCreatePollForm ? (
@@ -1914,7 +2392,7 @@ export default function ThreadPage() {
             <button
               type="submit"
               disabled={isReplying}
-              className="rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
+              className="cursor-pointer rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400 dark:disabled:bg-slate-700"
             >
               {isReplying ? "Posting..." : "Post Reply"}
             </button>

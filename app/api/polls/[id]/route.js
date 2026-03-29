@@ -22,6 +22,7 @@ async function buildPollResponse(pollId) {
     select: {
       id: true,
       threadId: true,
+      createdByUserId: true,
       question: true,
       deadline: true,
       createdAt: true,
@@ -44,6 +45,7 @@ async function buildPollResponse(pollId) {
   return {
     id: poll.id,
     threadId: poll.threadId,
+    createdByUserId: poll.createdByUserId,
     question: poll.question,
     deadline: poll.deadline,
     createdAt: poll.createdAt,
@@ -86,8 +88,9 @@ export async function PATCH(request, context) {
         id: true,
         question: true,
         deadline: true,
+        createdByUserId: true,
         thread: {
-          select: { authorId: true, status: true, isDeleted: true, isHidden: true },
+          select: { status: true, isDeleted: true, isHidden: true },
         },
       },
     });
@@ -104,7 +107,7 @@ export async function PATCH(request, context) {
       return NextResponse.json({ error: "Thread is closed" }, { status: 409 });
     }
 
-    if (poll.thread?.authorId !== payload.id) {
+    if (poll.createdByUserId !== payload.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -200,8 +203,9 @@ export async function DELETE(request, context) {
       where: { id: params.id },
       select: {
         id: true,
+        createdByUserId: true,
         thread: {
-          select: { authorId: true, status: true, isDeleted: true, isHidden: true },
+          select: { status: true, isDeleted: true, isHidden: true },
         },
       },
     });
@@ -218,7 +222,7 @@ export async function DELETE(request, context) {
       return NextResponse.json({ error: "Thread is closed" }, { status: 409 });
     }
 
-    if (poll.thread?.authorId !== payload.id) {
+    if (poll.createdByUserId !== payload.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

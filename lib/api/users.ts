@@ -58,8 +58,23 @@ export type PublicUserProfile = {
   posts: PublicUserPost[];
 };
 
+export type OwnedPoll = {
+  id: string;
+  threadId: string;
+  threadTitle: string;
+  question: string;
+  deadline: string;
+  createdAt: string;
+  updatedAt: string;
+  totalVotes: number;
+};
+
 type PublicUserProfileResponse = {
   user: PublicUserProfile;
+};
+
+type MyPollsResponse = {
+  polls: OwnedPoll[];
 };
 
 export type PublicUserActivityPoint = {
@@ -142,6 +157,28 @@ export async function getMyProfile(token: string): Promise<CurrentUserProfile> {
     followerCount: followers.length,
     followingCount: following.length,
   };
+}
+
+export async function getMyPolls(token: string): Promise<OwnedPoll[]> {
+  const response = await fetch("/api/users/me/polls", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+
+  const data = await parseJson<MyPollsResponse>(response);
+
+  if (!response.ok) {
+    throw new AuthApiError(getErrorMessage(data, "Failed to fetch your polls"), response.status);
+  }
+
+  if (!data || typeof data !== "object" || !("polls" in data) || !Array.isArray(data.polls)) {
+    throw new AuthApiError("Invalid server response", response.status);
+  }
+
+  return data.polls;
 }
 
 export async function getPublicUserProfile(userId: string): Promise<PublicUserProfile> {

@@ -31,39 +31,6 @@ export default function RootLayout({
   }
 
   applyTheme(initialTheme);
-
-  function bindThemeToggle() {
-    var buttons = Array.prototype.slice.call(document.querySelectorAll("button"));
-    var target = buttons.find(function (button) {
-      return button.textContent && button.textContent.trim() === "Dark";
-    });
-
-    if (!target) return;
-
-    var handler = window.__pp2ThemeToggleHandler;
-    if (!handler) {
-      handler = function () {
-        var nextTheme = root.classList.contains("dark") ? "light" : "dark";
-        applyTheme(nextTheme);
-        localStorage.setItem(KEY, nextTheme);
-      };
-      window.__pp2ThemeToggleHandler = handler;
-    }
-
-    if (window.__pp2ThemeToggleTarget && window.__pp2ThemeToggleTarget !== target) {
-      window.__pp2ThemeToggleTarget.removeEventListener("click", handler);
-    }
-
-    target.removeEventListener("click", handler);
-    target.addEventListener("click", handler);
-    window.__pp2ThemeToggleTarget = target;
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bindThemeToggle, { once: true });
-  } else {
-    bindThemeToggle();
-  }
 })();`,
           }}
         />
