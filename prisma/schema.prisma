@@ -95,6 +95,10 @@ model Thread {
   forumType       ForumType
   teamId          String?
   matchId         String?      @unique
+  overallSentiment String?
+  teamSentiments   Json?
+  sentimentGeneratedAt DateTime?
+  sentimentCommentCount Int?
   isHidden        Boolean      @default(false)
   hiddenAt        DateTime?
   hiddenByUserId  String?

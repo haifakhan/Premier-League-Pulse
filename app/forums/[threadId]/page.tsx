@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   createThreadPoll,
   createThreadReply,
   deletePost,
+  getMatchThreadSentiment,
   getPostRevisions,
   getThread,
   getThreadPoll,
+  MatchThreadSentiment,
   PostRevision,
+  SentimentLabel,
   ThreadApiError,
   ThreadDetail,
   ThreadPoll,
@@ -104,6 +107,33 @@ function mergePost(existing: ThreadPost, updated: ThreadPost) {
     author: updated.author ?? existing.author,
     parentPostId: updated.parentPostId ?? existing.parentPostId,
   };
+}
+
+function toSentimentLabel(value: string | null | undefined): SentimentLabel {
+  if (value === "positive" || value === "negative" || value === "mixed" || value === "neutral") {
+    return value;
+  }
+  return "neutral";
+}
+
+function formatSentimentLabel(value: SentimentLabel): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function sentimentPillClassName(value: SentimentLabel): string {
+  if (value === "positive") {
+    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300";
+  }
+
+  if (value === "negative") {
+    return "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300";
+  }
+
+  if (value === "mixed") {
+    return "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300";
+  }
+
+  return "bg-slate-200/80 text-slate-600 dark:bg-slate-700/70 dark:text-slate-300";
 }
 
 function ArrowLeftIcon({ className }: { className?: string }) {
@@ -723,6 +753,18 @@ export default function ThreadPage() {
   const [reportErrors, setReportErrors] = useState<ReportFormErrors>({});
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [reportToast, setReportToast] = useState<ReportToast | null>(null);
+  const [matchSentiment, setMatchSentiment] = useState<MatchThreadSentiment | null>(null);
+  const [isSentimentLoading, setIsSentimentLoading] = useState(false);
+  const [sentimentPollAttempts, setSentimentPollAttempts] = useState(0);
+
+  const refetchMatchSentiment = useCallback(async (matchId: string) => {
+    try {
+      const sentiment = await getMatchThreadSentiment(matchId);
+      setMatchSentiment(sentiment);
+    } catch {
+      // Keep existing sentiment state if passive refresh fails.
+    }
+  }, []);
 
   useEffect(() => {
     if (!threadId) {
@@ -783,11 +825,17 @@ export default function ThreadPage() {
         setReportDetails("");
         setReportErrors({});
         setIsSubmittingReport(false);
+        setMatchSentiment(null);
+        setIsSentimentLoading(false);
+        setSentimentPollAttempts(0);
       } catch (error) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : "Unable to load thread.");
           setThread(null);
           setPoll(null);
+          setMatchSentiment(null);
+          setIsSentimentLoading(false);
+          setSentimentPollAttempts(0);
         }
       } finally {
         if (!cancelled) {
@@ -816,6 +864,78 @@ export default function ThreadPage() {
       window.clearTimeout(timeoutId);
     };
   }, [reportToast]);
+
+  useEffect(() => {
+    const matchId = thread?.matchId;
+
+    if (!matchId) {
+      setMatchSentiment(null);
+      setIsSentimentLoading(false);
+      setSentimentPollAttempts(0);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSentimentLoading(true);
+    setSentimentPollAttempts(0);
+
+    getMatchThreadSentiment(matchId)
+      .then((sentiment) => {
+        if (cancelled) {
+          return;
+        }
+        setMatchSentiment(sentiment);
+        if (sentiment.generatedAt) {
+          setSentimentPollAttempts(0);
+        }
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        setMatchSentiment(null);
+        setSentimentPollAttempts(0);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsSentimentLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [thread?.matchId]);
+
+  useEffect(() => {
+    const matchId = thread?.matchId;
+
+    if (!matchId || !matchSentiment) {
+      return;
+    }
+
+    if (matchSentiment.generatedAt || matchSentiment.commentCount === 0) {
+      return;
+    }
+
+    if (sentimentPollAttempts >= 10) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSentimentPollAttempts((current) => current + 1);
+      void refetchMatchSentiment(matchId);
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    thread?.matchId,
+    matchSentiment,
+    sentimentPollAttempts,
+    refetchMatchSentiment,
+  ]);
 
   useEffect(() => {
     if (!thread) {
@@ -915,6 +1035,9 @@ export default function ThreadPage() {
   const hasVotedInPoll = poll ? Boolean(hasVotedPollIds[poll.id]) : false;
   const canCreatePoll = Boolean(user && token && thread.author.id === user.id && !poll && !isClosed);
   const canReportThread = Boolean(user && token && user.id !== thread.author.id);
+  const isMatchThread = Boolean(thread.matchId);
+  const hasGeneratedSentiment = Boolean(matchSentiment?.generatedAt && matchSentiment.commentCount > 0);
+  const overallSentiment = toSentimentLabel(matchSentiment?.overall);
 
   async function reloadPoll() {
     if (!threadId) {
@@ -957,6 +1080,10 @@ export default function ThreadPage() {
           : current
       );
       setReplyDraft("");
+      if (thread.matchId) {
+        setSentimentPollAttempts(0);
+        void refetchMatchSentiment(thread.matchId);
+      }
     } catch (error) {
       setReplyError(error instanceof Error ? error.message : "Unable to post reply.");
     } finally {
@@ -1024,6 +1151,10 @@ export default function ThreadPage() {
       );
       setActiveReplyTargetPostId((current) => (current === postId ? null : current));
       setReplyDraftsByPostId((current) => ({ ...current, [postId]: "" }));
+      if (thread.matchId) {
+        setSentimentPollAttempts(0);
+        void refetchMatchSentiment(thread.matchId);
+      }
     } catch (error) {
       setReplyErrorsByPostId((current) => ({
         ...current,
@@ -1420,6 +1551,64 @@ export default function ThreadPage() {
           </div>
         ) : null}
       </header>
+
+      {isMatchThread ? (
+        isSentimentLoading && !matchSentiment ? (
+          <section className="rounded-xl border border-slate-300/80 bg-slate-100/60 px-4 py-3 dark:border-slate-700/70 dark:bg-slate-800/60">
+            <div className="h-4 w-full animate-pulse rounded bg-slate-200/90 dark:bg-slate-700/80" />
+          </section>
+        ) : (
+          <section className="rounded-xl border border-slate-300/80 bg-slate-100/60 px-4 py-3 dark:border-slate-700/70 dark:bg-slate-800/60">
+            {hasGeneratedSentiment ? (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div className="inline-flex items-center gap-2">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Thread Mood</span>
+                  <span
+                    className={[
+                      "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+                      sentimentPillClassName(overallSentiment),
+                    ].join(" ")}
+                  >
+                    {formatSentimentLabel(overallSentiment)}
+                  </span>
+                </div>
+
+                {matchSentiment?.teamSentiments?.length ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {matchSentiment.teamSentiments.map((team, index) => {
+                      const label = toSentimentLabel(team.sentiment);
+                      return (
+                        <div key={team.teamId} className="inline-flex items-center gap-2">
+                          {index > 0 ? (
+                            <span className="text-xs text-slate-300 dark:text-slate-600">|</span>
+                          ) : null}
+                          <span className="text-xs text-slate-600 dark:text-slate-300">{team.teamName}</span>
+                          <span
+                            className={[
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+                              sentimentPillClassName(label),
+                            ].join(" ")}
+                          >
+                            {formatSentimentLabel(label)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">
+                  Based on {matchSentiment?.commentCount ?? 0} comments
+                </span>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Sentiment will appear once comments are posted.
+              </p>
+            )}
+          </section>
+        )
+      ) : null}
 
       {poll ? (
         <PollCard
