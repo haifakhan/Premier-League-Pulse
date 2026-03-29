@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getStandingsTable, type LeagueStanding } from "@/lib/api/sports";
+import { getMatchesByStatus, getStandingsTable, type LeagueStanding, type Match } from "@/lib/api/sports";
 
 interface Standing {
   position: number;
@@ -45,6 +45,49 @@ function toStanding(row: LeagueStanding): Standing {
   };
 }
 
+function buildFallbackFormByTeam(matches: Match[]): Record<number, string> {
+  const formsByTeam = new Map<number, Array<"W" | "D" | "L">>();
+  const sortedMatches = [...matches].sort(
+    (left, right) => new Date(right.utcDate).getTime() - new Date(left.utcDate).getTime()
+  );
+
+  function pushResult(teamId: number | undefined, result: "W" | "D" | "L") {
+    if (typeof teamId !== "number") return;
+    const existing = formsByTeam.get(teamId) ?? [];
+    if (existing.length >= 5) return;
+    existing.push(result);
+    formsByTeam.set(teamId, existing);
+  }
+
+  for (const match of sortedMatches) {
+    const homeScore = match.score?.fullTime?.home;
+    const awayScore = match.score?.fullTime?.away;
+
+    if (typeof homeScore !== "number" || typeof awayScore !== "number") {
+      continue;
+    }
+
+    if (homeScore > awayScore) {
+      pushResult(match.homeTeam?.id, "W");
+      pushResult(match.awayTeam?.id, "L");
+      continue;
+    }
+
+    if (homeScore < awayScore) {
+      pushResult(match.homeTeam?.id, "L");
+      pushResult(match.awayTeam?.id, "W");
+      continue;
+    }
+
+    pushResult(match.homeTeam?.id, "D");
+    pushResult(match.awayTeam?.id, "D");
+  }
+
+  return Object.fromEntries(
+    Array.from(formsByTeam.entries()).map(([teamId, results]) => [teamId, results.join(",")])
+  );
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   if (typeof error === "string" && error.trim()) return error;
@@ -65,8 +108,12 @@ function getTeamInitials(name: string): string {
 function parseForm(form: string | null): FormResult[] {
   if (!form || !form.trim()) return ["N", "N", "N", "N", "N"];
 
-  const parsed = form
-    .split(",")
+  const normalized = form.trim().toUpperCase();
+  const rawEntries = normalized.includes(",")
+    ? normalized.split(",")
+    : normalized.replace(/\s+/g, "").split("");
+
+  const parsed = rawEntries
     .map((item) => item.trim().toUpperCase())
     .filter(Boolean)
     .map((item): FormResult => {
@@ -170,9 +217,26 @@ export default function StandingsPage() {
       setErrorMessage(null);
 
       try {
-        const table = await getStandingsTable();
+        const [table, recentMatches] = await Promise.all([
+          getStandingsTable(),
+          getMatchesByStatus("RECENT").catch(() => []),
+        ]);
+
         if (!isMounted) return;
-        setStandings(table.map(toStanding));
+
+        const fallbackFormsByTeam = buildFallbackFormByTeam(recentMatches);
+        setStandings(
+          table.map((row) => {
+            const standing = toStanding(row);
+            if (!standing.form && fallbackFormsByTeam[standing.teamId]) {
+              return {
+                ...standing,
+                form: fallbackFormsByTeam[standing.teamId],
+              };
+            }
+            return standing;
+          })
+        );
       } catch (error) {
         if (!isMounted) return;
         setStandings([]);
