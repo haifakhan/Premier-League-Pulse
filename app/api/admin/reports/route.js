@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireAdmin } from "@/lib/auth";
-import { AUTO_FLAG_REASON } from "@/lib/ai";
+import {
+  AUTO_FLAG_REASON,
+  AUTO_FLAG_THRESHOLD,
+  getModerationAssessment,
+} from "@/lib/ai";
 
 const VALID_FILTERS = new Set([
   "all",
@@ -75,12 +79,48 @@ function formatPercentage(value) {
   return `${Math.round(value * 100)}%`;
 }
 
-function getVerdict(aiScore, aiLabel) {
-  if (typeof aiScore !== "number" || typeof aiLabel !== "string" || aiLabel.trim().length === 0) {
+function getVerdict(assessment) {
+  if (
+    !assessment ||
+    (assessment.classification !== "TOXIC" &&
+      assessment.classification !== "NON_TOXIC" &&
+      assessment.classification !== "UNKNOWN")
+  ) {
     return "UNKNOWN";
   }
 
-  return aiScore >= 0.5 ? "LIKELY_INAPPROPRIATE" : "LIKELY_ACCEPTABLE";
+  if (
+    assessment.classification === "TOXIC" &&
+    typeof assessment.toxicityScore === "number" &&
+    assessment.toxicityScore >= AUTO_FLAG_THRESHOLD
+  ) {
+    return "LIKELY_INAPPROPRIATE";
+  }
+
+  if (assessment.classification === "NON_TOXIC") {
+    return "LIKELY_ACCEPTABLE";
+  }
+
+  return "UNKNOWN";
+}
+
+function formatModerationClassification(value) {
+  if (value === "TOXIC") return "Toxic";
+  if (value === "NON_TOXIC") return "Non-toxic";
+  return "Unknown";
+}
+
+function getItemSourceText(item) {
+  if (item?.targetType === "POST") {
+    return item?.post?.content ?? "";
+  }
+
+  const title = item?.thread?.title ?? "";
+  const rootContent = item?.threadRootContent ?? "";
+  if (title && rootContent) {
+    return `Thread title: ${title}\nMain post: ${rootContent}`;
+  }
+  return title || rootContent;
 }
 
 function truncateDetail(value, maxLength = 160) {
@@ -103,12 +143,19 @@ function truncateDetail(value, maxLength = 160) {
 function buildVerdictExplanation({
   aiLabel,
   aiScore,
+  assessment,
   userReasonCounts,
   detailSnippet,
 }) {
   const labelText = typeof aiLabel === "string" && aiLabel.trim().length > 0 ? aiLabel.trim() : "N/A";
-  const scoreText = formatPercentage(aiScore);
-  const aiContext = `Top AI label: ${labelText}. Toxicity score: ${scoreText}.`;
+  const confidenceText = formatPercentage(aiScore);
+  const toxicityText = formatPercentage(assessment?.toxicityScore ?? null);
+  const classText = formatModerationClassification(assessment?.classification);
+  const signalSourceText =
+    assessment?.signalSource === "HEURISTIC"
+      ? " Signal source: heuristic abuse phrase detection."
+      : "";
+  const aiContext = `Interpreted label: ${classText}. Model label: ${labelText}. Confidence: ${confidenceText}. Estimated toxicity: ${toxicityText}.${signalSourceText}`;
 
   const reasons = Object.entries(userReasonCounts).sort(([a], [b]) => a.localeCompare(b));
   const userContext = reasons.length
@@ -163,8 +210,8 @@ function compareByLatestDesc(a, b) {
 }
 
 function compareByPendingPriority(a, b) {
-  const aScore = a.aiScore;
-  const bScore = b.aiScore;
+  const aScore = getModerationAssessment(a.aiLabel, a.aiScore, getItemSourceText(a)).toxicityScore;
+  const bScore = getModerationAssessment(b.aiLabel, b.aiScore, getItemSourceText(b)).toxicityScore;
 
   if (aScore == null && bScore != null) {
     return 1;
@@ -232,6 +279,17 @@ export async function GET(request) {
             id: true,
             title: true,
             isHidden: true,
+            posts: {
+              where: {
+                kind: "ROOT",
+                isDeleted: false,
+                isHidden: false,
+              },
+              select: {
+                content: true,
+              },
+              take: 1,
+            },
             author: {
               select: {
                 id: true,
@@ -266,6 +324,7 @@ export async function GET(request) {
         status: report.status,
         aiScore: null,
         aiLabel: null,
+        toxicityScore: null,
         latestReportedAt: report.createdAt,
         pendingUserReportCount: 0,
         pendingReportCount: 0,
@@ -275,6 +334,8 @@ export async function GET(request) {
         relatedThreadId: targetType === "THREAD" ? targetId : report.post?.threadId ?? null,
         post: targetType === "POST" ? { content: report.post?.content ?? "" } : null,
         thread: targetType === "THREAD" ? { title: report.thread?.title ?? "" } : null,
+        threadRootContent:
+          targetType === "THREAD" ? report.thread?.posts?.[0]?.content ?? "" : null,
         targetAuthor,
         targetIsHidden: targetHidden,
         userReasonCounts: {},
@@ -302,9 +363,17 @@ export async function GET(request) {
         existing.firstDetailSnippet = truncateDetail(parsedReason.details);
       }
 
+      const reportAssessment = getModerationAssessment(report.aiLabel, report.aiScore);
       if (
-        typeof report.aiScore === "number" &&
-        (existing.aiScore == null || report.aiScore > existing.aiScore)
+        typeof reportAssessment.toxicityScore === "number" &&
+        (existing.toxicityScore == null || reportAssessment.toxicityScore > existing.toxicityScore)
+      ) {
+        existing.toxicityScore = reportAssessment.toxicityScore;
+        existing.aiScore = report.aiScore;
+        existing.aiLabel = report.aiLabel;
+      } else if (
+        existing.aiScore == null &&
+        typeof report.aiScore === "number"
       ) {
         existing.aiScore = report.aiScore;
         existing.aiLabel = report.aiLabel;
@@ -364,10 +433,16 @@ export async function GET(request) {
 
     const responseReports = filteredItems
       .map((item) => {
-        const verdict = getVerdict(item.aiScore, item.aiLabel);
+        const assessment = getModerationAssessment(
+          item.aiLabel,
+          item.aiScore,
+          getItemSourceText(item)
+        );
+        const verdict = getVerdict(assessment);
         const verdictExplanation = buildVerdictExplanation({
           aiLabel: item.aiLabel,
           aiScore: item.aiScore,
+          assessment,
           userReasonCounts: item.userReasonCounts,
           detailSnippet: item.firstDetailSnippet,
         });
