@@ -42,7 +42,7 @@ services:
     command:
       - sh
       - -c
-      - npx prisma migrate deploy && node -r dotenv/config scripts/seed-admin.cjs && node -r dotenv/config scripts/sync-match-threads.cjs
+      - npx prisma migrate deploy && node -r dotenv/config scripts/seed-admin.cjs && node -r dotenv/config scripts/seed-demo-data.cjs && node -r dotenv/config scripts/sync-match-threads.cjs
 
   nginx:
     image: nginx:1.27-alpine
