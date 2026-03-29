@@ -55,15 +55,6 @@ export default function AuthNavbar() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-2 rounded border border-slate-300 px-2 py-1.5 sm:flex">
-            <span className="text-xs text-slate-500">Search</span>
-            <input
-              type="text"
-              placeholder="Search..."
-              className="w-36 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-              aria-label="Search"
-            />
-          </div>
           <button
             type="button"
             className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700"

@@ -64,6 +64,7 @@ export default function AppealsPage() {
       return;
     }
 
+    const authToken = token;
     let cancelled = false;
 
     async function loadAppeals() {
@@ -71,7 +72,7 @@ export default function AppealsPage() {
       setErrorMessage(null);
 
       try {
-        const data = await getMyAppeals(token);
+        const data = await getMyAppeals(authToken);
         if (cancelled) {
           return;
         }

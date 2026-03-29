@@ -6,7 +6,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { listThreads } from "@/lib/api/threads";
 import { getTeams, type TeamOption } from "@/lib/api/sports";
 import { useAuth } from "@/lib/context/auth";
-import { ForumBadge, ForumTagPill, ForumTeamCrest, ForumUserAvatar } from "@/components/forums/forum-ui";
+import { ForumBadge, ForumTagPill, ForumTeamCrest, ForumUserLink } from "@/components/forums/forum-ui";
 
 type ThreadListItem = Awaited<ReturnType<typeof listThreads>>[number];
 type ForumScope = "all" | "general" | "team";
@@ -148,16 +148,15 @@ function ThreadCard({
       : "Open this discussion to read the full post and join the conversation.";
 
   return (
-    <Link
-      href={`/forums/${thread.id}`}
-      className="group block rounded-xl border border-slate-300/80 bg-white/90 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/70 hover:shadow-md dark:border-slate-700/70 dark:bg-slate-900/85 dark:shadow-black/20 dark:hover:border-sky-500/60 dark:hover:shadow-black/40"
-    >
-      <article className="flex gap-3">
+    <article className="group rounded-xl border border-slate-300/80 bg-white/90 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-400/70 hover:shadow-md dark:border-slate-700/70 dark:bg-slate-900/85 dark:shadow-black/20 dark:hover:border-sky-500/60 dark:hover:shadow-black/40">
+      <div className="flex gap-3">
         <div className="hidden md:block">
-          <ForumUserAvatar
-            name={thread.author.username}
-            imageUrl={thread.author.avatarUrl ?? null}
-            className="h-10 w-10"
+          <ForumUserLink
+            userId={thread.author.id}
+            username={thread.author.username}
+            avatarUrl={thread.author.avatarUrl ?? null}
+            avatarClassName="h-10 w-10"
+            textClassName="sr-only"
           />
         </div>
 
@@ -183,31 +182,43 @@ function ThreadCard({
             {thread.matchId ? <ForumBadge tone="sky">Match Thread</ForumBadge> : null}
           </div>
 
-          <h3 className="text-lg font-bold tracking-tight text-slate-900 transition-colors group-hover:text-sky-700 dark:text-slate-100 dark:group-hover:text-sky-300">
-            {thread.title}
-          </h3>
+          <Link href={`/forums/${thread.id}`} className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70">
+            <h3 className="text-lg font-bold tracking-tight text-slate-900 transition-colors group-hover:text-sky-700 dark:text-slate-100 dark:group-hover:text-sky-300">
+              {thread.title}
+            </h3>
 
-          <p className="text-sm leading-5 text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden dark:text-slate-300">
-            {previewText}
-          </p>
+            <p className="mt-3 text-sm leading-5 text-slate-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden dark:text-slate-300">
+              {previewText}
+            </p>
 
-          {thread.tags?.length ? (
-            <div className="flex flex-wrap gap-2">
-              {thread.tags.slice(0, 5).map((tag) => (
-                <ForumTagPill key={`${thread.id}-${tag}`}>{tag}</ForumTagPill>
-              ))}
-            </div>
-          ) : null}
+            {thread.tags?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {thread.tags.slice(0, 5).map((tag) => (
+                  <ForumTagPill key={`${thread.id}-${tag}`}>{tag}</ForumTagPill>
+                ))}
+              </div>
+            ) : null}
+          </Link>
 
-          <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-            <span>By {thread.author.username}</span>
+          <footer className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1.5">
+              <span>By</span>
+              <ForumUserLink
+                userId={thread.author.id}
+                username={thread.author.username}
+                avatarUrl={thread.author.avatarUrl ?? null}
+                showAvatar={false}
+                className="rounded"
+                textClassName="text-xs"
+              />
+            </span>
             <span>{formatTimestamp(thread.createdAt)}</span>
             <span>{repliesCount} replies</span>
             <span>Views —</span>
           </footer>
         </div>
-      </article>
-    </Link>
+      </div>
+    </article>
   );
 }
 
