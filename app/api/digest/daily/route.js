@@ -11,6 +11,10 @@ import {
 import { generateDigest, DEFAULT_DIGEST_MODEL } from "@/lib/ai-digest";
 
 const DIGEST_TTL_MS = 24 * 60 * 60 * 1000;
+const DIGEST_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DISCUSSION_LIMIT = 5;
+const MATCH_LIMIT = 5;
+const STANDINGS_LIMIT = 5;
 
 function parseDateParam(value) {
   if (!value) return null;
@@ -28,71 +32,120 @@ function parseDateParam(value) {
   return value;
 }
 
-function excerptText(text, maxLength = 140) {
-  if (typeof text !== "string") return "";
-  const trimmed = text.trim().replace(/\s+/g, " ");
-  if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, maxLength - 3)}...`;
+function defaultUpdatedAtForDate(date) {
+  const candidate = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(candidate.getTime())) {
+    return new Date().toISOString();
+  }
+  return candidate.toISOString();
 }
 
-function buildPrompt({ date, threads, matches, standings }) {
+function normalizeSections(sections) {
+  if (!Array.isArray(sections)) {
+    return [];
+  }
+
+  return sections
+    .map((section) => {
+      if (!section || typeof section !== "object") {
+        return null;
+      }
+
+      const title = typeof section.title === "string" ? section.title.trim() : "";
+      const content = typeof section.content === "string" ? section.content.trim() : "";
+
+      if (!title || !content) {
+        return null;
+      }
+
+      return { title, content };
+    })
+    .filter(Boolean);
+}
+
+function buildDiscussionSection(threads) {
+  if (!threads.length) {
+    return "No notable discussions in the last 24 hours.";
+  }
+
+  return threads
+    .slice(0, 3)
+    .map((thread) => `${thread.title} (${thread.replies} replies)`)
+    .join(" • ");
+}
+
+function buildMatchSection(matches) {
+  if (!matches.length) {
+    return "No completed matches were recorded in the last 24 hours.";
+  }
+
+  return matches.slice(0, 3).join(" • ");
+}
+
+function buildStandingsSection(standings) {
+  if (!standings.length) {
+    return "No standings updates are available right now.";
+  }
+
+  return standings.slice(0, 3).join(" • ");
+}
+
+function buildPrompt({ date, discussionsText, matchesText, standingsText }) {
   const lines = [];
   lines.push(`Sports Daily Digest for ${date}.`);
-  
-  lines.push("Top discussions today include: " + 
-    (threads.length ? threads.map(t => `"${t.title}" with ${t.replies} replies`).join(", ") : "no notable discussions") + ".");
-
-  lines.push("Recent match results: " + 
-    (matches.length ? matches.join(", ") : "no completed matches") + ".");
-
-  lines.push("Current standings: " + 
-    (standings.length ? standings.join(", ") : "no standings available") + ".");
+  lines.push("Write a concise update in 3 short paragraphs for football fans.");
+  lines.push(`Top discussions: ${discussionsText}`);
+  lines.push(`Match highlights: ${matchesText}`);
+  lines.push(`Standings snapshot: ${standingsText}`);
+  lines.push("Do not invent facts that are not in these inputs.");
 
   return lines.join(" ");
 }
 
-// function buildPrompt({ date, threads, matches, standings }) {
-//   const lines = [];
-//   lines.push(`Date: ${date}`);
-//   lines.push("Write a short daily sports digest using only the data below.");
-//   lines.push("Keep it under 180 words in 1-3 short paragraphs.");
-//   lines.push("Do not add details that are not present.");
-//   lines.push("");
+function getWindowBounds(parsedDate) {
+  const windowEnd = parsedDate
+    ? new Date(`${parsedDate}T23:59:59.999Z`)
+    : new Date();
+  const windowStart = new Date(windowEnd.getTime() - DIGEST_WINDOW_MS);
+  return { windowStart, windowEnd };
+}
 
-//   lines.push("Top discussions:");
-//   if (!threads.length) {
-//     lines.push("- No notable discussions available.");
-//   } else {
-//     threads.forEach((thread, index) => {
-//       const replies =
-//         typeof thread.replies === "number" ? ` (replies: ${thread.replies})` : "";
-//       const excerpt = thread.excerpt ? ` - ${thread.excerpt}` : "";
-//       lines.push(`${index + 1}. ${thread.title}${excerpt}${replies}`);
-//     });
-//   }
+function normalizeDigestPayload(payload, date) {
+  const safePayload = payload && typeof payload === "object" ? payload : {};
+  const summary =
+    typeof safePayload.summary === "string" ? safePayload.summary.trim() : "";
+  const sources =
+    safePayload.sources && typeof safePayload.sources === "object"
+      ? safePayload.sources
+      : {
+          threadsConsidered: 0,
+          matchesConsidered: 0,
+          standingsTeamsConsidered: 0,
+        };
 
-//   lines.push("");
-//   lines.push("Recent completed matches:");
-//   if (!matches.length) {
-//     lines.push("- No completed matches available.");
-//   } else {
-//     matches.forEach((match, index) => {
-//       lines.push(`${index + 1}. ${match}`);
-//     });
-//   }
+  let updatedAt =
+    typeof safePayload.updatedAt === "string" ? safePayload.updatedAt : "";
+  if (!updatedAt || Number.isNaN(new Date(updatedAt).getTime())) {
+    updatedAt = defaultUpdatedAtForDate(date);
+  }
 
-//   lines.push("");
-//   lines.push("Standings (top teams):");
-//   if (!standings.length) {
-//     lines.push("- No standings available.");
-//   } else {
-//     standings.forEach((entry, index) => {
-//       lines.push(`${index + 1}. ${entry}`);
-//     });
-//   }
+  const sections = normalizeSections(safePayload.sections);
 
-//   return lines.join("\n");
-// }
+  return {
+    date:
+      typeof safePayload.date === "string" && safePayload.date.trim()
+        ? safePayload.date
+        : date,
+    updatedAt,
+    summary,
+    sections,
+    sources,
+    model:
+      typeof safePayload.model === "string" && safePayload.model.trim()
+        ? safePayload.model
+        : process.env.HF_DIGEST_MODEL?.trim() || DEFAULT_DIGEST_MODEL,
+  };
+}
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -105,54 +158,69 @@ export async function GET(request) {
 
   const date = parsedDate || new Date().toISOString().slice(0, 10);
   const cacheKey = `digest:daily:${date}`;
+  const { windowStart, windowEnd } = getWindowBounds(parsedDate);
 
   try {
     const cached = await getCachedFresh(cacheKey);
     if (cached) {
+      const normalizedCached = normalizeDigestPayload(cached, date);
       return NextResponse.json(
-        { digest: { ...cached, cached: true } },
+        { digest: { ...normalizedCached, cached: true } },
         { status: 200 }
       );
     }
 
     const threads = await prisma.thread.findMany({
-      where: { isHidden: false, isDeleted: false },
-      orderBy: { createdAt: "desc" },
-      take: 5,
+      where: {
+        isHidden: false,
+        isDeleted: false,
+        posts: {
+          some: {
+            isHidden: false,
+            isDeleted: false,
+            createdAt: { gte: windowStart, lte: windowEnd },
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 40,
       select: {
         id: true,
         title: true,
-        createdAt: true,
+        updatedAt: true,
         _count: {
           select: {
-            posts: { where: { isHidden: false, isDeleted: false } },
+            posts: {
+              where: {
+                isHidden: false,
+                isDeleted: false,
+                createdAt: { gte: windowStart, lte: windowEnd },
+              },
+            },
           },
         },
       },
     });
 
-    const threadIds = threads.map((thread) => thread.id);
-    const rootPosts = threadIds.length
-      ? await prisma.post.findMany({
-          where: {
-            threadId: { in: threadIds },
-            kind: "ROOT",
-            isHidden: false,
-            isDeleted: false,
-          },
-          select: { threadId: true, content: true },
-        })
-      : [];
+    const rankedThreads = [...threads]
+      .sort((left, right) => {
+        const byEngagement = right._count.posts - left._count.posts;
+        if (byEngagement !== 0) {
+          return byEngagement;
+        }
+        return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+      })
+      .slice(0, DISCUSSION_LIMIT);
 
-    const rootMap = new Map(
-      rootPosts.map((post) => [post.threadId, post.content])
-    );
+    const threadSummaries = rankedThreads.map((thread) => {
+      const postCount = typeof thread._count.posts === "number" ? thread._count.posts : 0;
+      const replies = Math.max(0, postCount - 1);
 
-    const threadSummaries = threads.map((thread) => ({
-      title: thread.title,
-      excerpt: excerptText(rootMap.get(thread.id) || ""),
-      replies: thread._count.posts,
-    }));
+      return {
+        title: thread.title,
+        replies,
+      };
+    });
 
     let matches = [];
     try {
@@ -163,9 +231,18 @@ export async function GET(request) {
       );
       const list = result?.data?.matches || [];
       matches = list
-        .filter((match) => match?.utcDate)
+        .filter((match) => {
+          if (!match?.utcDate) {
+            return false;
+          }
+          const matchTime = new Date(match.utcDate).getTime();
+          if (Number.isNaN(matchTime)) {
+            return false;
+          }
+          return matchTime >= windowStart.getTime() && matchTime <= windowEnd.getTime();
+        })
         .sort((a, b) => new Date(b.utcDate) - new Date(a.utcDate))
-        .slice(0, 5)
+        .slice(0, MATCH_LIMIT)
         .map((match) => {
           const home = match.homeTeam?.name || "Home";
           const away = match.awayTeam?.name || "Away";
@@ -194,7 +271,7 @@ export async function GET(request) {
         result?.data?.standings?.[0]?.table ||
         [];
       standings = (table || [])
-        .slice(0, 5)
+        .slice(0, STANDINGS_LIMIT)
         .map((row) => {
           const name = row?.team?.name || "Team";
           const points = row?.points ?? "-";
@@ -211,6 +288,22 @@ export async function GET(request) {
       standingsTeamsConsidered: standings.length,
     };
 
+    const sections = [
+      {
+        title: "Top Discussions",
+        content: buildDiscussionSection(threadSummaries),
+      },
+      {
+        title: "Match Highlights",
+        content: buildMatchSection(matches),
+      },
+      {
+        title: "Standings",
+        content: buildStandingsSection(standings),
+      },
+    ];
+    const updatedAt = new Date().toISOString();
+
     if (
       sources.threadsConsidered === 0 &&
       sources.matchesConsidered === 0 &&
@@ -218,8 +311,10 @@ export async function GET(request) {
     ) {
       const digest = {
         date,
+        updatedAt,
         summary:
           "No major discussions, completed matches, or standings updates were available for this digest.",
+        sections,
         sources,
         model: process.env.HF_DIGEST_MODEL?.trim() || DEFAULT_DIGEST_MODEL,
       };
@@ -232,17 +327,16 @@ export async function GET(request) {
       );
     }
 
-    const prompt = buildPrompt({
-  date,
-  threads: threadSummaries,
-  matches,
-  standings,
-});
+    const discussionsText = buildDiscussionSection(threadSummaries);
+    const matchesText = buildMatchSection(matches);
+    const standingsText = buildStandingsSection(standings);
 
-// console.log("DIGEST THREADS:", threadSummaries);
-// console.log("DIGEST MATCHES:", matches);
-// console.log("DIGEST STANDINGS:", standings);
-// console.log("DIGEST PROMPT:", prompt);
+    const prompt = buildPrompt({
+      date,
+      discussionsText,
+      matchesText,
+      standingsText,
+    });
 
     let digestResult;
     try {
@@ -256,7 +350,9 @@ export async function GET(request) {
 
     const digest = {
       date,
+      updatedAt,
       summary: digestResult.summary,
+      sections,
       sources,
       model: digestResult.model,
     };
