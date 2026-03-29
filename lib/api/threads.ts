@@ -49,6 +49,7 @@ export type PollOption = {
 export type ThreadPoll = {
   id: string;
   threadId: string;
+  createdByUserId: string;
   question: string;
   deadline: string;
   createdAt: string;
@@ -108,6 +109,7 @@ type CreatePollResponse = {
   poll: {
     id: string;
     threadId: string;
+    createdByUserId?: string;
     question: string;
     deadline: string;
     createdAt?: string;
@@ -298,6 +300,10 @@ export async function createThread(
   return data.thread;
 }
 
+type UpdateThreadResponse = {
+  thread: ThreadDetail;
+};
+
 function normalizeTagEntry(entry: string | { name?: string } | null | undefined): string | null {
   if (typeof entry === "string") {
     const normalized = entry.trim().toLowerCase();
@@ -397,6 +403,38 @@ export async function createThreadReply(
   return data.post;
 }
 
+export async function updateThread(
+  threadId: string,
+  token: string,
+  payload: { title?: string; content?: string }
+): Promise<ThreadDetail> {
+  const data = await requestJson<UpdateThreadResponse>(
+    `/api/threads/${threadId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders(token),
+      },
+      body: JSON.stringify(payload),
+    },
+    "Failed to update thread"
+  );
+
+  return data.thread;
+}
+
+export async function deleteThread(threadId: string, token: string): Promise<void> {
+  await requestJson<{ ok?: boolean }>(
+    `/api/threads/${threadId}`,
+    {
+      method: "DELETE",
+      headers: buildAuthHeaders(token),
+    },
+    "Failed to delete thread"
+  );
+}
+
 export async function updatePost(
   postId: string,
   token: string,
@@ -478,6 +516,42 @@ export async function createThreadPoll(
   );
 
   return data.poll;
+}
+
+export async function updatePoll(
+  pollId: string,
+  token: string,
+  payload: {
+    question?: string;
+    deadline?: string;
+    options?: string[];
+  }
+): Promise<ThreadPoll> {
+  const data = await requestJson<PollResponse>(
+    `/api/polls/${pollId}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...buildAuthHeaders(token),
+      },
+      body: JSON.stringify(payload),
+    },
+    "Failed to update poll"
+  );
+
+  return data.poll;
+}
+
+export async function deletePoll(pollId: string, token: string): Promise<void> {
+  await requestJson<{ ok?: boolean }>(
+    `/api/polls/${pollId}`,
+    {
+      method: "DELETE",
+      headers: buildAuthHeaders(token),
+    },
+    "Failed to delete poll"
+  );
 }
 
 export async function voteInPoll(

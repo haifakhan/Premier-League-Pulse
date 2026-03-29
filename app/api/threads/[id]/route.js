@@ -173,6 +173,8 @@ export async function PATCH(request, context) {
             content: true,
             kind: true,
             createdAt: true,
+            updatedAt: true,
+            parentPostId: true,
             author: { select: { id: true, username: true, avatarUrl: true } },
           },
           take: 1,

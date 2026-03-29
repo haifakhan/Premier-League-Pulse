@@ -96,12 +96,14 @@ export async function POST(request, context) {
       const poll = await tx.poll.create({
         data: {
           threadId: thread.id,
+          createdByUserId: payload.id,
           question: question.trim(),
           deadline: deadlineDate,
         },
         select: {
           id: true,
           threadId: true,
+          createdByUserId: true,
           question: true,
           deadline: true,
         },
@@ -149,6 +151,7 @@ export async function GET(_request, context) {
       select: {
         id: true,
         threadId: true,
+        createdByUserId: true,
         question: true,
         deadline: true,
         createdAt: true,
@@ -182,6 +185,7 @@ export async function GET(_request, context) {
         poll: {
           id: poll.id,
           threadId: poll.threadId,
+          createdByUserId: poll.createdByUserId,
           question: poll.question,
           deadline: poll.deadline,
           createdAt: poll.createdAt,

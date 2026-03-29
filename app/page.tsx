@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DashboardFeed } from "@/components/feed";
 import HomeDailyDigest from "@/components/matches/home-daily-digest";
 import HomeDashboardMatches from "@/components/matches/home-dashboard-matches";
 
@@ -44,6 +45,7 @@ export default function Home() {
         </div>
       </section>
 
+      <DashboardFeed />
       <HomeDailyDigest />
       <HomeDashboardMatches />
     </div>
