@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { maybeAutoFlagPost } from "@/lib/ai";
+import { recalculateMatchThreadSentiment } from "@/lib/match-thread-sentiment";
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -94,6 +95,7 @@ export async function POST(request, context) {
     });
 
     maybeAutoFlagPost(post.id, payload.id, post.content).catch(() => {});
+    recalculateMatchThreadSentiment(thread.id).catch(() => {});
 
     return NextResponse.json({ post }, { status: 201 });
   } catch (error) {

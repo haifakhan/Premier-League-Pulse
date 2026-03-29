@@ -155,6 +155,22 @@ export type MatchThreadAvailability = {
   syncedAction: string;
 };
 
+export type SentimentLabel = "positive" | "negative" | "mixed" | "neutral";
+
+export type MatchThreadSentimentTeam = {
+  teamId: string;
+  teamName: string;
+  sentiment: SentimentLabel;
+  score: number;
+};
+
+export type MatchThreadSentiment = {
+  overall: SentimentLabel;
+  teamSentiments: MatchThreadSentimentTeam[];
+  commentCount: number;
+  generatedAt: string | null;
+};
+
 function getApiErrorMessage(data: unknown, fallback: string) {
   if (
     data &&
@@ -241,6 +257,19 @@ export async function getMatchThreadAvailability(
   );
 
   return data;
+}
+
+export async function getMatchThreadSentiment(
+  matchId: string | number
+): Promise<MatchThreadSentiment> {
+  return requestJson<MatchThreadSentiment>(
+    `/api/matches/${String(matchId)}/sentiment`,
+    {
+      method: "GET",
+      cache: "no-store",
+    },
+    "Failed to fetch match thread sentiment"
+  );
 }
 
 export async function createThread(
