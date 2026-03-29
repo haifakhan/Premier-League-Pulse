@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { analyzeContent } from "@/lib/ai";
 
+const THREAD_ANALYSIS_MAX_LENGTH = 4000;
+
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -36,6 +38,31 @@ function formatStoredReason(reason, details) {
 
 function isUniqueConstraintError(error) {
   return Boolean(error && typeof error === "object" && error.code === "P2002");
+}
+
+function buildThreadAnalysisText(title, rootContent) {
+  const titleText = isNonEmptyString(title) ? title.trim() : "";
+  const rootText = isNonEmptyString(rootContent) ? rootContent.trim() : "";
+
+  const parts = [];
+  if (titleText) {
+    parts.push(`Thread title: ${titleText}`);
+  }
+
+  if (rootText) {
+    parts.push(`Main post: ${rootText}`);
+  }
+
+  const combined = parts.join("\n");
+  if (!combined) {
+    return "";
+  }
+
+  if (combined.length <= THREAD_ANALYSIS_MAX_LENGTH) {
+    return combined;
+  }
+
+  return combined.slice(0, THREAD_ANALYSIS_MAX_LENGTH);
 }
 
 export async function POST(request) {
@@ -159,6 +186,17 @@ export async function POST(request) {
         title: true,
         isDeleted: true,
         isHidden: true,
+        posts: {
+          where: {
+            kind: "ROOT",
+            isDeleted: false,
+            isHidden: false,
+          },
+          select: {
+            content: true,
+          },
+          take: 1,
+        },
       },
     });
 
@@ -197,7 +235,9 @@ export async function POST(request) {
       },
     });
 
-    const { aiScore, aiLabel } = await analyzeContent(thread.title || "");
+    const rootContent = thread.posts?.[0]?.content ?? "";
+    const analysisText = buildThreadAnalysisText(thread.title || "", rootContent);
+    const { aiScore, aiLabel } = await analyzeContent(analysisText || thread.title || "");
 
     const updatedReport = await prisma.report.update({
       where: { id: report.id },
