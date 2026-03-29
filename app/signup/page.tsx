@@ -45,6 +45,13 @@ export default function SignupPage() {
           </p>
         </div>
 
+        <Link
+          href="/api/auth/google/start"
+          className="mb-5 inline-flex w-full items-center justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+        >
+          Continue with Google
+        </Link>
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium text-slate-700">
