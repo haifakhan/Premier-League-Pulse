@@ -24,7 +24,7 @@ import {
 import { createReport, REPORT_REASON_OPTIONS, type ReportReason, type ReportTargetType } from "@/lib/api/reports";
 import { getTeams, type TeamOption } from "@/lib/api/sports";
 import { useAuth } from "@/lib/context/auth";
-import { ForumBadge, ForumTagPill, ForumTeamCrest, ForumUserAvatar } from "@/components/forums/forum-ui";
+import { ForumBadge, ForumTagPill, ForumTeamCrest, ForumUserLink } from "@/components/forums/forum-ui";
 import ReportModal from "@/components/forums/report-modal";
 
 type RevisionState = {
@@ -519,15 +519,15 @@ function PostCard({
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <ForumUserAvatar
-            name={post.author?.username ?? "Unknown user"}
-            imageUrl={post.author?.avatarUrl ?? null}
-            className={isRoot ? "h-10 w-10" : "h-9 w-9"}
+          <ForumUserLink
+            userId={post.author?.id ?? null}
+            username={post.author?.username ?? "Unknown user"}
+            avatarUrl={post.author?.avatarUrl ?? null}
+            avatarClassName={isRoot ? "h-10 w-10" : "h-9 w-9"}
+            className="items-start"
+            textClassName="text-base"
           />
-          <div>
-            <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              {post.author?.username ?? "Unknown user"}
-            </p>
+          <div className="pt-0.5">
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {formatTimestamp(post.createdAt)}
               {isEdited ? " • edited" : ""}
@@ -693,7 +693,14 @@ function PostCard({
                   className="rounded-xl border border-slate-300/80 bg-white/85 p-4 dark:border-slate-700/70 dark:bg-slate-900/80"
                 >
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {revision.editor.username} edited this on {formatTimestamp(revision.editedAt)}
+                    <ForumUserLink
+                      userId={revision.editor.id}
+                      username={revision.editor.username}
+                      showAvatar={false}
+                      className="inline-flex rounded align-baseline"
+                      textClassName="text-sm"
+                    />{" "}
+                    edited this on {formatTimestamp(revision.editedAt)}
                   </p>
                   <div className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
                     {revision.previousContent}
@@ -1531,7 +1538,17 @@ export default function ThreadPage() {
         </h1>
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-          <span>By {thread.author.username}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span>By</span>
+            <ForumUserLink
+              userId={thread.author.id}
+              username={thread.author.username}
+              avatarUrl={thread.author.avatarUrl ?? null}
+              showAvatar={false}
+              className="rounded"
+              textClassName="text-xs"
+            />
+          </span>
           <span>{formatTimestamp(thread.createdAt)}</span>
           <span>{repliesCount} replies</span>
           <span>Views —</span>

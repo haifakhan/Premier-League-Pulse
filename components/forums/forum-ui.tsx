@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useState } from "react";
 
 export type ForumBadgeTone = "neutral" | "success" | "warning" | "sky";
@@ -88,6 +89,59 @@ export function ForumUserAvatar({
       ].join(" ")}
       loading="lazy"
     />
+  );
+}
+
+export function ForumUserLink({
+  userId,
+  username,
+  avatarUrl,
+  className,
+  avatarClassName,
+  textClassName,
+  showAvatar = true,
+}: {
+  userId?: string | null;
+  username: string;
+  avatarUrl?: string | null;
+  className?: string;
+  avatarClassName?: string;
+  textClassName?: string;
+  showAvatar?: boolean;
+}) {
+  const content = (
+    <>
+      {showAvatar ? (
+        <ForumUserAvatar
+          name={username}
+          imageUrl={avatarUrl ?? null}
+          className={avatarClassName ?? "h-9 w-9"}
+        />
+      ) : null}
+      <span
+        className={[
+          "min-w-0 truncate font-semibold text-slate-900 transition group-hover:text-sky-700 group-focus-visible:text-sky-700 dark:text-slate-100 dark:group-hover:text-sky-300 dark:group-focus-visible:text-sky-300",
+          textClassName ?? "",
+        ].join(" ")}
+      >
+        {username}
+      </span>
+    </>
+  );
+
+  const finalClassName = [
+    "group inline-flex min-w-0 items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70",
+    className ?? "",
+  ].join(" ");
+
+  if (!userId) {
+    return <div className={finalClassName}>{content}</div>;
+  }
+
+  return (
+    <Link href={`/users/${userId}`} className={finalClassName}>
+      {content}
+    </Link>
   );
 }
 

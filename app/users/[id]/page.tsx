@@ -195,6 +195,36 @@ function UserAvatar({
   );
 }
 
+function UserProfileLink({
+  userId,
+  username,
+  avatarUrl,
+  avatarClassName,
+  textClassName,
+  className,
+}: {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  avatarClassName: string;
+  textClassName?: string;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={`/users/${userId}`}
+      className={`group inline-flex min-w-0 items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 ${className ?? ""}`}
+    >
+      <UserAvatar username={username} avatarUrl={avatarUrl} className={avatarClassName} />
+      <span
+        className={`truncate font-medium text-slate-900 transition group-hover:text-sky-700 group-focus-visible:text-sky-700 ${textClassName ?? ""}`}
+      >
+        {username}
+      </span>
+    </Link>
+  );
+}
+
 export default function UserProfilePage() {
   const params = useParams<{ id: string }>();
   const userId = Array.isArray(params?.id) ? (params.id[0] ?? "") : (params?.id ?? "");
@@ -348,6 +378,7 @@ export default function UserProfilePage() {
     () => profile?.posts.filter((post) => post.kind === "REPLY") ?? [],
     [profile?.posts]
   );
+  const isFollowBlockedByBan = Boolean(user?.isBanned && !isFollowingProfile);
 
   async function handleFollowToggle() {
     if (!token || !profile || isOwnProfile) {
@@ -458,7 +489,7 @@ export default function UserProfilePage() {
               <button
                 type="button"
                 onClick={() => void handleFollowToggle()}
-                disabled={isSubmittingFollow || isLoadingSocial}
+                disabled={isSubmittingFollow || isLoadingSocial || isFollowBlockedByBan}
                 className="rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
                 {isSubmittingFollow ? "Updating..." : isFollowingProfile ? "Unfollow" : "Follow"}
@@ -484,6 +515,11 @@ export default function UserProfilePage() {
 
         {socialError ? <p className="mt-4 text-sm text-red-600">{socialError}</p> : null}
         {actionError ? <p className="mt-4 text-sm text-red-600">{actionError}</p> : null}
+        {isFollowBlockedByBan ? (
+          <p className="mt-4 text-sm text-amber-700">
+            Banned users cannot follow new users.
+          </p>
+        ) : null}
       </div>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -600,26 +636,30 @@ export default function UserProfilePage() {
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-xl font-semibold text-slate-900">Followers</h2>
-              <span className="text-sm text-slate-500">{followers.length}</span>
+              <span className="text-sm text-slate-500">{profile.followerCount}</span>
             </div>
+            <p className="mt-1 text-xs text-slate-500">Sorted by most recent follow.</p>
 
             <div className="mt-4 space-y-3">
-              {followers.length ? (
+              {isLoadingSocial ? (
+                <p className="text-sm text-slate-600">Loading followers...</p>
+              ) : socialError ? (
+                <p className="text-sm text-red-600">{socialError}</p>
+              ) : followers.length ? (
                 followers.map((follower) => (
                   <div
                     key={follower.id}
                     className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <UserAvatar
+                    <div className="min-w-0">
+                      <UserProfileLink
+                        userId={follower.id}
                         username={follower.username}
                         avatarUrl={follower.avatarUrl}
-                        className="h-10 w-10 text-sm"
+                        avatarClassName="h-10 w-10 text-sm"
+                        textClassName="text-sm"
                       />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-slate-900">{follower.username}</p>
-                        <p className="text-xs text-slate-500">Followed {formatTimestamp(follower.followedAt)}</p>
-                      </div>
+                      <p className="text-xs text-slate-500">Followed {formatTimestamp(follower.followedAt)}</p>
                     </div>
 
                     <button
@@ -641,23 +681,29 @@ export default function UserProfilePage() {
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-xl font-semibold text-slate-900">Following</h2>
-              <span className="text-sm text-slate-500">{following.length}</span>
+              <span className="text-sm text-slate-500">{profile.followingCount}</span>
             </div>
+            <p className="mt-1 text-xs text-slate-500">Sorted by most recent follow.</p>
 
             <div className="mt-4 space-y-3">
-              {following.length ? (
+              {isLoadingSocial ? (
+                <p className="text-sm text-slate-600">Loading following list...</p>
+              ) : socialError ? (
+                <p className="text-sm text-red-600">{socialError}</p>
+              ) : following.length ? (
                 following.map((followedUser) => (
                   <div
                     key={followedUser.id}
                     className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3"
                   >
-                    <UserAvatar
-                      username={followedUser.username}
-                      avatarUrl={followedUser.avatarUrl}
-                      className="h-10 w-10 text-sm"
-                    />
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-900">{followedUser.username}</p>
+                      <UserProfileLink
+                        userId={followedUser.id}
+                        username={followedUser.username}
+                        avatarUrl={followedUser.avatarUrl}
+                        avatarClassName="h-10 w-10 text-sm"
+                        textClassName="text-sm"
+                      />
                       <p className="text-xs text-slate-500">Followed {formatTimestamp(followedUser.followedAt)}</p>
                     </div>
                   </div>
