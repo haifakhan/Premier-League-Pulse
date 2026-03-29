@@ -4,7 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getTeams, TeamOption } from "@/lib/api/sports";
-import { updateMyProfile } from "@/lib/api/users";
+import { updateMyProfile, uploadMyAvatar } from "@/lib/api/users";
 import { useAuth } from "@/lib/context/auth";
 
 export default function EditProfilePage() {
@@ -17,6 +17,7 @@ export default function EditProfilePage() {
     favoriteTeamId: "",
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [teamsError, setTeamsError] = useState<string | null>(null);
@@ -73,6 +74,13 @@ export default function EditProfilePage() {
     setErrorMessage(null);
   }
 
+  function handleAvatarFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextFile = event.target.files?.[0] ?? null;
+    setAvatarFile(nextFile);
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -86,11 +94,23 @@ export default function EditProfilePage() {
     setErrorMessage(null);
 
     try {
+      let nextAvatarUrl = form.avatarUrl;
+
+      if (avatarFile) {
+        nextAvatarUrl = await uploadMyAvatar(token, avatarFile);
+      }
+
       await updateMyProfile(token, {
         username: form.username,
-        avatarUrl: form.avatarUrl,
+        avatarUrl: nextAvatarUrl,
         favoriteTeamId: form.favoriteTeamId || null,
       });
+
+      setForm((current) => ({
+        ...current,
+        avatarUrl: nextAvatarUrl,
+      }));
+      setAvatarFile(null);
       await refreshUser();
       setSuccessMessage("Profile updated successfully.");
     } catch (saveError) {
@@ -141,6 +161,21 @@ export default function EditProfilePage() {
             className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-slate-900 outline-none transition focus:border-slate-500"
             placeholder="https://example.com/avatar.png"
           />
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-medium text-slate-700">Upload Avatar File</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            onChange={handleAvatarFileChange}
+            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none transition file:mr-3 file:rounded-full file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-slate-700 focus:border-slate-500"
+          />
+          {avatarFile ? (
+            <p className="text-xs text-slate-500">
+              Selected file: {avatarFile.name} (this will override Avatar URL on save)
+            </p>
+          ) : null}
         </label>
 
         <label className="block space-y-2">

@@ -25,6 +25,10 @@ type UpdateCurrentUserResponse = {
   user: AuthUser;
 };
 
+type UploadAvatarResponse = {
+  avatarUrl: string;
+};
+
 export type PublicUserThread = {
   id: string;
   title: string;
@@ -239,4 +243,35 @@ export async function updateMyProfile(
   }
 
   return data.user;
+}
+
+export async function uploadMyAvatar(token: string, file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  const response = await fetch("/api/users/me/avatar", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  const data = await parseJson<UploadAvatarResponse>(response);
+
+  if (!response.ok) {
+    throw new AuthApiError(getErrorMessage(data, "Failed to upload avatar"), response.status);
+  }
+
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("avatarUrl" in data) ||
+    typeof data.avatarUrl !== "string" ||
+    data.avatarUrl.trim().length === 0
+  ) {
+    throw new AuthApiError("Invalid server response", response.status);
+  }
+
+  return data.avatarUrl;
 }
