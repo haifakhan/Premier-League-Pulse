@@ -1,10 +1,53 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/context/auth";
 
 export default function AuthNavbar() {
   const { user, isLoading, logout } = useAuth();
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const storedTheme = window.localStorage.getItem("theme");
+    const nextTheme =
+      storedTheme === "dark" || storedTheme === "light"
+        ? storedTheme
+        : root.classList.contains("dark")
+          ? "dark"
+          : "light";
+
+    root.classList.toggle("dark", nextTheme === "dark");
+    setTheme(nextTheme);
+  }, []);
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [isMenuOpen]);
+
+  function toggleTheme() {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    window.localStorage.setItem("theme", nextTheme);
+    setTheme(nextTheme);
+  }
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -57,27 +100,38 @@ export default function AuthNavbar() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="cursor-pointer rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
           >
-            Dark
+            {theme === "dark" ? "Light" : "Dark"}
           </button>
 
           {isLoading ? (
             <div className="h-9 w-24 rounded border border-slate-300 bg-slate-100" aria-hidden="true" />
           ) : user ? (
-            <details className="relative">
-              <summary className="list-none cursor-pointer rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700">
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen((current) => !current)}
+                aria-expanded={isMenuOpen}
+                aria-haspopup="menu"
+                className="cursor-pointer rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+              >
                 {user.username}
-              </summary>
-              <div className="absolute right-0 z-20 mt-2 w-48 rounded border border-slate-200 bg-white p-1 shadow-md">
+              </button>
+              {isMenuOpen ? (
+                <div className="absolute right-0 z-20 mt-2 w-48 rounded border border-slate-200 bg-white p-1 shadow-md">
                 <Link
                   href="/profile"
+                  onClick={() => setIsMenuOpen(false)}
                   className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                 >
                   View Profile
                 </Link>
                 <Link
                   href="/profile/edit"
+                  onClick={() => setIsMenuOpen(false)}
                   className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                 >
                   Edit Profile
@@ -86,12 +140,14 @@ export default function AuthNavbar() {
                   <>
                     <Link
                       href="/admin/moderation"
+                      onClick={() => setIsMenuOpen(false)}
                       className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                     >
                       Moderation
                     </Link>
                     <Link
                       href="/admin/appeals"
+                      onClick={() => setIsMenuOpen(false)}
                       className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                     >
                       Appeals Queue
@@ -101,6 +157,7 @@ export default function AuthNavbar() {
                 {user.isBanned ? (
                   <Link
                     href="/appeals"
+                    onClick={() => setIsMenuOpen(false)}
                     className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                   >
                     Submit Appeal
@@ -108,13 +165,17 @@ export default function AuthNavbar() {
                 ) : null}
                 <button
                   type="button"
-                  onClick={() => void logout()}
-                  className="block w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    void logout();
+                  }}
+                  className="block w-full cursor-pointer rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
                 >
                   Logout
                 </button>
-              </div>
-            </details>
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <Link

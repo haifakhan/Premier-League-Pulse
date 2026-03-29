@@ -509,7 +509,7 @@ export default function UserProfilePage() {
                 type="button"
                 onClick={() => void handleFollowToggle()}
                 disabled={isSubmittingFollow || isLoadingSocial || isFollowBlockedByBan}
-                className="rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="cursor-pointer rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
                 {isSubmittingFollow ? "Updating..." : isFollowingProfile ? "Unfollow" : "Follow"}
               </button>
@@ -685,7 +685,7 @@ export default function UserProfilePage() {
                       type="button"
                       onClick={() => void handleRemoveFollower(follower.id)}
                       disabled={removingFollowerId === follower.id}
-                      className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                      className="cursor-pointer rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                     >
                       {removingFollowerId === follower.id ? "Removing..." : "Remove"}
                     </button>
