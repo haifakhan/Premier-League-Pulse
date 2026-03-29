@@ -2,20 +2,36 @@ type ApiErrorResponse = {
   error?: string;
 };
 
+export type ModerationFilter =
+  | "all"
+  | "pending"
+  | "dismissed"
+  | "user-reported"
+  | "approved-hidden"
+  | "banned-users";
+
 export type ModerationQueueItem = {
   id: string;
   targetType: "POST" | "THREAD";
   targetId: string;
+  status: "PENDING" | "DISMISSED" | "APPROVED";
   aiScore: number | null;
   aiLabel: string | null;
   verdict: "LIKELY_INAPPROPRIATE" | "LIKELY_ACCEPTABLE" | "UNKNOWN";
   verdictExplanation: string;
   latestReportedAt: string;
+  reportCount: number;
+  userReportCount: number;
   pendingUserReportCount: number;
   pendingReportCount: number;
   relatedThreadId: string | null;
   post: { content: string } | null;
   thread: { title: string } | null;
+  targetAuthor: {
+    id: string;
+    username: string;
+    isBanned: boolean;
+  } | null;
 };
 
 type ModerationQueueResponse = {
@@ -72,9 +88,14 @@ function buildAuthHeaders(token: string) {
   };
 }
 
-export async function getModerationQueue(token: string): Promise<ModerationQueueItem[]> {
+export async function getModerationQueue(
+  token: string,
+  filter: ModerationFilter = "all"
+): Promise<ModerationQueueItem[]> {
+  const query = new URLSearchParams({ filter });
+
   const data = await requestJson<ModerationQueueResponse>(
-    "/api/admin/reports",
+    `/api/admin/reports?${query.toString()}`,
     {
       method: "GET",
       headers: buildAuthHeaders(token),
@@ -105,5 +126,27 @@ export async function dismissModerationItem(reportId: string, token: string): Pr
       headers: buildAuthHeaders(token),
     },
     "Failed to dismiss report"
+  );
+}
+
+export async function banUser(userId: string, token: string): Promise<void> {
+  await requestJson<ModerationActionResponse>(
+    `/api/admin/users/${userId}/ban`,
+    {
+      method: "POST",
+      headers: buildAuthHeaders(token),
+    },
+    "Failed to ban user"
+  );
+}
+
+export async function unbanUser(userId: string, token: string): Promise<void> {
+  await requestJson<ModerationActionResponse>(
+    `/api/admin/users/${userId}/unban`,
+    {
+      method: "POST",
+      headers: buildAuthHeaders(token),
+    },
+    "Failed to unban user"
   );
 }

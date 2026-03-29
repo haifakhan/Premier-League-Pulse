@@ -39,11 +39,7 @@ export async function POST(request) {
         { status: 401 }
       );
     }
-
-    if (user.isBanned) {
-      return NextResponse.json({ error: "Account is banned" }, { status: 403 });
-    }
-
+    
     const token = signToken({ id: user.id, email: user.email, role: user.role });
 
     const safeUser = {

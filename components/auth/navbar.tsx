@@ -36,12 +36,20 @@ export default function AuthNavbar() {
               Forums
             </Link>
             {user?.role === "ADMIN" ? (
-              <Link
-                href="/admin/moderation"
-                className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-              >
-                Moderation
-              </Link>
+              <>
+                <Link
+                  href="/admin/moderation"
+                  className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Moderation
+                </Link>
+                <Link
+                  href="/admin/appeals"
+                  className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Appeals
+                </Link>
+              </>
             ) : null}
           </nav>
         </div>
@@ -84,11 +92,27 @@ export default function AuthNavbar() {
                   Edit Profile
                 </Link>
                 {user.role === "ADMIN" ? (
+                  <>
+                    <Link
+                      href="/admin/moderation"
+                      className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                    >
+                      Moderation
+                    </Link>
+                    <Link
+                      href="/admin/appeals"
+                      className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                    >
+                      Appeals Queue
+                    </Link>
+                  </>
+                ) : null}
+                {user.isBanned ? (
                   <Link
-                    href="/admin/moderation"
+                    href="/appeals"
                     className="block rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                   >
-                    Moderation
+                    Submit Appeal
                   </Link>
                 ) : null}
                 <button

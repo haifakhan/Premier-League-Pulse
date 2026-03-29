@@ -4,6 +4,28 @@ import prisma from "@/lib/prisma";
 import { requireAuth, requireAdmin } from "@/lib/auth";
 import { AUTO_FLAG_REASON } from "@/lib/ai";
 
+const VALID_FILTERS = new Set([
+  "all",
+  "pending",
+  "dismissed",
+  "user-reported",
+  "approved-hidden",
+  "banned-users",
+]);
+
+function parseFilter(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return "all";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!VALID_FILTERS.has(normalized)) {
+    throw new Error("Invalid moderation filter");
+  }
+
+  return normalized;
+}
+
 function getErrorStatus(message) {
   if (message.includes("Authorization") || message.includes("token")) {
     return 401;
@@ -11,6 +33,10 @@ function getErrorStatus(message) {
 
   if (message === "Forbidden") {
     return 403;
+  }
+
+  if (message === "Invalid moderation filter") {
+    return 400;
   }
 
   return 500;
@@ -94,16 +120,88 @@ function buildVerdictExplanation({
   return `${aiContext} ${userContext}${detailContext}`;
 }
 
+function getTargetTypeAndId(report) {
+  const targetType = report.postId ? "POST" : report.threadId ? "THREAD" : null;
+  const targetId = report.postId ?? report.threadId ?? null;
+
+  if (!targetType || !targetId) {
+    return null;
+  }
+
+  return { targetType, targetId };
+}
+
+function getTargetAuthor(report, targetType) {
+  const author = targetType === "POST" ? report.post?.author : report.thread?.author;
+
+  if (!author?.id || typeof author.id !== "string" || author.id.trim().length === 0) {
+    return null;
+  }
+
+  const normalizedUsername =
+    typeof author.username === "string" && author.username.trim().length > 0
+      ? author.username.trim()
+      : "unknown-user";
+
+  return {
+    id: author.id,
+    username: normalizedUsername,
+    isBanned: Boolean(author.isBanned),
+  };
+}
+
+function isTargetHidden(report, targetType) {
+  if (targetType === "THREAD") {
+    return Boolean(report.thread?.isHidden);
+  }
+
+  return Boolean(report.post?.isHidden || report.post?.thread?.isHidden);
+}
+
+function compareByLatestDesc(a, b) {
+  return new Date(b.latestReportedAt).getTime() - new Date(a.latestReportedAt).getTime();
+}
+
+function compareByPendingPriority(a, b) {
+  const aScore = a.aiScore;
+  const bScore = b.aiScore;
+
+  if (aScore == null && bScore != null) {
+    return 1;
+  }
+
+  if (aScore != null && bScore == null) {
+    return -1;
+  }
+
+  if (aScore != null && bScore != null && bScore !== aScore) {
+    return bScore - aScore;
+  }
+
+  if (b.pendingUserReportCount !== a.pendingUserReportCount) {
+    return b.pendingUserReportCount - a.pendingUserReportCount;
+  }
+
+  if (b.pendingReportCount !== a.pendingReportCount) {
+    return b.pendingReportCount - a.pendingReportCount;
+  }
+
+  return compareByLatestDesc(a, b);
+}
+
 export async function GET(request) {
   try {
     const payload = requireAuth(request);
     requireAdmin(payload);
 
+    const { searchParams } = new URL(request.url);
+    const filter = parseFilter(searchParams.get("filter"));
+
     const reports = await prisma.report.findMany({
-      where: { status: "PENDING" },
       select: {
         id: true,
         reason: true,
+        status: true,
         aiScore: true,
         aiLabel: true,
         createdAt: true,
@@ -114,12 +212,33 @@ export async function GET(request) {
             id: true,
             content: true,
             threadId: true,
+            isHidden: true,
+            author: {
+              select: {
+                id: true,
+                username: true,
+                isBanned: true,
+              },
+            },
+            thread: {
+              select: {
+                isHidden: true,
+              },
+            },
           },
         },
         thread: {
           select: {
             id: true,
             title: true,
+            isHidden: true,
+            author: {
+              select: {
+                id: true,
+                username: true,
+                isBanned: true,
+              },
+            },
           },
         },
       },
@@ -128,38 +247,55 @@ export async function GET(request) {
     const groupedByTarget = new Map();
 
     for (const report of reports) {
-      const targetType = report.postId ? "POST" : report.threadId ? "THREAD" : null;
-      const targetId = report.postId ?? report.threadId ?? null;
-
-      if (!targetType || !targetId) {
+      const target = getTargetTypeAndId(report);
+      if (!target) {
         continue;
       }
 
+      const { targetType, targetId } = target;
       const key = `${targetType}:${targetId}`;
+      const parsedReason = parseStoredReason(report.reason);
+      const isUserReported = !isAutoFlagReason(report.reason);
+      const targetAuthor = getTargetAuthor(report, targetType);
+      const targetHidden = isTargetHidden(report, targetType);
+
       const existing = groupedByTarget.get(key) ?? {
         id: report.id,
         targetType,
         targetId,
+        status: report.status,
         aiScore: null,
         aiLabel: null,
         latestReportedAt: report.createdAt,
         pendingUserReportCount: 0,
         pendingReportCount: 0,
+        reportCount: 0,
+        userReportCount: 0,
+        hasPendingUserReport: false,
         relatedThreadId: targetType === "THREAD" ? targetId : report.post?.threadId ?? null,
         post: targetType === "POST" ? { content: report.post?.content ?? "" } : null,
         thread: targetType === "THREAD" ? { title: report.thread?.title ?? "" } : null,
+        targetAuthor,
+        targetIsHidden: targetHidden,
         userReasonCounts: {},
         firstDetailSnippet: null,
       };
 
-      existing.pendingReportCount += 1;
-      const parsedReason = parseStoredReason(report.reason);
+      existing.reportCount += 1;
 
-      if (!isAutoFlagReason(report.reason)) {
-        existing.pendingUserReportCount += 1;
-
+      if (isUserReported) {
+        existing.userReportCount += 1;
         const reasonKey = parsedReason.baseReason || "Other";
         existing.userReasonCounts[reasonKey] = (existing.userReasonCounts[reasonKey] ?? 0) + 1;
+      }
+
+      if (report.status === "PENDING") {
+        existing.pendingReportCount += 1;
+
+        if (isUserReported) {
+          existing.pendingUserReportCount += 1;
+          existing.hasPendingUserReport = true;
+        }
       }
 
       if (!existing.firstDetailSnippet && parsedReason.details) {
@@ -180,16 +316,53 @@ export async function GET(request) {
       ) {
         existing.latestReportedAt = report.createdAt;
         existing.id = report.id;
+        existing.status = report.status;
+
+        if (targetAuthor) {
+          existing.targetAuthor = targetAuthor;
+        }
       }
 
       if (!existing.relatedThreadId && report.post?.threadId) {
         existing.relatedThreadId = report.post.threadId;
       }
 
+      if (!existing.targetAuthor && targetAuthor) {
+        existing.targetAuthor = targetAuthor;
+      }
+
+      existing.targetIsHidden = existing.targetIsHidden || targetHidden;
+
       groupedByTarget.set(key, existing);
     }
 
-    const responseReports = Array.from(groupedByTarget.values())
+    const canonicalItems = Array.from(groupedByTarget.values());
+
+    const filteredItems = canonicalItems.filter((item) => {
+      if (filter === "pending") {
+        return item.status === "PENDING";
+      }
+
+      if (filter === "dismissed") {
+        return item.status === "DISMISSED";
+      }
+
+      if (filter === "user-reported") {
+        return item.status === "PENDING" && item.hasPendingUserReport;
+      }
+
+      if (filter === "approved-hidden") {
+        return item.status === "APPROVED" && item.targetIsHidden;
+      }
+
+      if (filter === "banned-users") {
+        return Boolean(item.targetAuthor?.isBanned);
+      }
+
+      return true;
+    });
+
+    const responseReports = filteredItems
       .map((item) => {
         const verdict = getVerdict(item.aiScore, item.aiLabel);
         const verdictExplanation = buildVerdictExplanation({
@@ -203,43 +376,44 @@ export async function GET(request) {
           id: item.id,
           targetType: item.targetType,
           targetId: item.targetId,
+          status: item.status,
           aiScore: item.aiScore,
           aiLabel: item.aiLabel,
           latestReportedAt: item.latestReportedAt,
+          reportCount: item.reportCount,
+          userReportCount: item.userReportCount,
           pendingUserReportCount: item.pendingUserReportCount,
           pendingReportCount: item.pendingReportCount,
           relatedThreadId: item.relatedThreadId,
           post: item.post,
           thread: item.thread,
+          targetAuthor: item.targetAuthor,
           verdict,
           verdictExplanation,
         };
       })
       .sort((a, b) => {
-        const aScore = a.aiScore;
-        const bScore = b.aiScore;
-
-        if (aScore == null && bScore != null) {
-          return 1;
+        if (filter === "dismissed" || filter === "approved-hidden" || filter === "banned-users") {
+          return compareByLatestDesc(a, b);
         }
 
-        if (aScore != null && bScore == null) {
-          return -1;
+        if (filter === "all") {
+          if (a.status === "PENDING" && b.status !== "PENDING") {
+            return -1;
+          }
+
+          if (a.status !== "PENDING" && b.status === "PENDING") {
+            return 1;
+          }
+
+          if (a.status === "PENDING" && b.status === "PENDING") {
+            return compareByPendingPriority(a, b);
+          }
+
+          return compareByLatestDesc(a, b);
         }
 
-        if (aScore != null && bScore != null && bScore !== aScore) {
-          return bScore - aScore;
-        }
-
-        if (b.pendingUserReportCount !== a.pendingUserReportCount) {
-          return b.pendingUserReportCount - a.pendingUserReportCount;
-        }
-
-        if (b.pendingReportCount !== a.pendingReportCount) {
-          return b.pendingReportCount - a.pendingReportCount;
-        }
-
-        return new Date(b.latestReportedAt).getTime() - new Date(a.latestReportedAt).getTime();
+        return compareByPendingPriority(a, b);
       });
 
     return NextResponse.json({ reports: responseReports }, { status: 200 });
