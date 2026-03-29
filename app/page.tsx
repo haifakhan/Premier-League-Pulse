@@ -6,10 +6,10 @@ export default function Home() {
   return (
     <div className="space-y-6">
       <section
-        className="relative overflow-hidden rounded-2xl bg-[url('/pl.jpg')] bg-cover bg-center"
+        className="relative overflow-hidden rounded-2xl bg-[url('/pl3.gif.gif')] bg-cover bg-center"
         aria-label="Homepage hero"
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/45 to-black/65" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/55 to-black/75 backdrop-blur-[1px]" />
 
         <div className="relative flex min-h-[62vh] items-end px-5 py-10 sm:px-8 sm:py-12 lg:min-h-[68vh] lg:px-12 lg:py-14">
           <div className="max-w-3xl space-y-5 text-white">
