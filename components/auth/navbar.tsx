@@ -7,23 +7,40 @@ import { useAuth } from "@/lib/context/auth";
 
 export default function AuthNavbar() {
   const { user, isLoading, logout } = useAuth();
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") {
+      return "light";
+    }
+
+    const storedTheme = window.localStorage.getItem("theme");
+    if (storedTheme === "dark" || storedTheme === "light") {
+      return storedTheme;
+    }
+
+    return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    const storedTheme = window.localStorage.getItem("theme");
-    const nextTheme =
-      storedTheme === "dark" || storedTheme === "light"
-        ? storedTheme
-        : root.classList.contains("dark")
-          ? "dark"
-          : "light";
+  const mainLinks = [
+    { href: "/", label: "Dashboard" },
+    { href: "/matches", label: "Matches" },
+    { href: "/standings", label: "Standings" },
+    { href: "/forums", label: "Forums" },
+  ];
 
-    root.classList.toggle("dark", nextTheme === "dark");
-    setTheme(nextTheme);
-  }, []);
+  const adminLinks =
+    user?.role === "ADMIN"
+      ? [
+          { href: "/admin/moderation", label: "Moderation" },
+          { href: "/admin/appeals", label: "Appeals" },
+        ]
+      : [];
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
 
   useEffect(() => {
     if (!isMenuOpen) {
@@ -65,43 +82,24 @@ export default function AuthNavbar() {
             />
           </Link>
           <nav className="hidden items-center gap-1 sm:flex">
-            <Link href="/" className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100">
-              Dashboard
-            </Link>
-            <Link
-              href="/matches"
-              className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              Matches
-            </Link>
-            <Link
-              href="/standings"
-              className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              Standings
-            </Link>
-            <Link
-              href="/forums"
-              className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              Forums
-            </Link>
-            {user?.role === "ADMIN" ? (
-              <>
-                <Link
-                  href="/admin/moderation"
-                  className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-                >
-                  Moderation
-                </Link>
-                <Link
-                  href="/admin/appeals"
-                  className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
-                >
-                  Appeals
-                </Link>
-              </>
-            ) : null}
+            {mainLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                {link.label}
+              </Link>
+            ))}
+            {adminLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                {link.label}
+              </Link>
+            ))}
           </nav>
         </div>
 
@@ -110,7 +108,7 @@ export default function AuthNavbar() {
             type="button"
             onClick={toggleTheme}
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            className="cursor-pointer rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+            className="cursor-pointer rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-100 sm:px-3"
           >
             {theme === "dark" ? "Light" : "Dark"}
           </button>
@@ -124,9 +122,10 @@ export default function AuthNavbar() {
                 onClick={() => setIsMenuOpen((current) => !current)}
                 aria-expanded={isMenuOpen}
                 aria-haspopup="menu"
-                className="cursor-pointer rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+                className="cursor-pointer max-w-[8.5rem] truncate rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-100 sm:max-w-none sm:px-3"
               >
-                {user.username}
+                <span className="hidden sm:inline">{user.username}</span>
+                <span className="sm:hidden">Account</span>
               </button>
               {isMenuOpen ? (
                 <div className="absolute right-0 z-20 mt-2 w-48 rounded border border-slate-200 bg-white p-1 shadow-md">
@@ -185,7 +184,7 @@ export default function AuthNavbar() {
               ) : null}
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 sm:flex">
               <Link
                 href="/login"
                 className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
@@ -200,8 +199,72 @@ export default function AuthNavbar() {
               </Link>
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsMobileNavOpen((current) => !current);
+              setIsMenuOpen(false);
+            }}
+            aria-expanded={isMobileNavOpen}
+            aria-label="Toggle navigation"
+            className="cursor-pointer inline-flex h-9 w-9 items-center justify-center rounded border border-slate-300 text-slate-700 hover:bg-slate-100 sm:hidden"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+              {isMobileNavOpen ? (
+                <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" strokeLinejoin="round" />
+              ) : (
+                <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+              )}
+            </svg>
+          </button>
         </div>
       </div>
+
+      {isMobileNavOpen ? (
+        <div className="border-t border-slate-200 bg-white sm:hidden">
+          <nav className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-3">
+            {mainLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsMobileNavOpen(false)}
+                className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                {link.label}
+              </Link>
+            ))}
+            {adminLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsMobileNavOpen(false)}
+                className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                {link.label}
+              </Link>
+            ))}
+            {!user ? (
+              <>
+                <Link
+                  href="/login"
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className="rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className="rounded bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500"
+                >
+                  Sign Up
+                </Link>
+              </>
+            ) : null}
+          </nav>
+        </div>
+      ) : null}
     </header>
   );
 }
