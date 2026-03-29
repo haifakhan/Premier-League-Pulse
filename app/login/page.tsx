@@ -22,7 +22,7 @@ export default function LoginPage() {
     try {
       const response = await loginRequest({ email, password });
       await login(response.token);
-      router.push("/");
+      router.push(response.user.isBanned ? "/appeals" : "/");
     } catch (caughtError) {
       if (caughtError instanceof AuthApiError) {
         setError(caughtError.message);
@@ -96,6 +96,9 @@ export default function LoginPage() {
           <Link href="/signup" className="font-medium text-sky-700 hover:text-sky-600">
             Sign up
           </Link>
+        </p>
+        <p className="mt-2 text-xs text-slate-500">
+          Account restricted? Log in and submit an appeal request from your account menu.
         </p>
       </div>
     </section>

@@ -7,6 +7,53 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function getErrorStatus(message) {
+  if (message.includes("Authorization") || message.includes("token")) {
+    return 401;
+  }
+
+  return 500;
+}
+
+export async function GET(request) {
+  try {
+    const payload = requireAuth(request);
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { id: true, isBanned: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const appeals = await prisma.appeal.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        reviewedAt: true,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        isBanned: user.isBanned,
+        appeals,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    const message = error?.message || "Failed to fetch appeals";
+    return NextResponse.json({ error: message }, { status: getErrorStatus(message) });
+  }
+}
+
 export async function POST(request) {
   let body;
 
@@ -37,6 +84,7 @@ export async function POST(request) {
     if (!isNonEmptyString(reason)) {
       return NextResponse.json({ error: "reason is required" }, { status: 400 });
     }
+    const trimmedReason = reason.trim();
 
     const pendingAppeal = await prisma.appeal.findFirst({
       where: {
@@ -56,15 +104,22 @@ export async function POST(request) {
     const appeal = await prisma.appeal.create({
       data: {
         userId: user.id,
-        reason: reason.trim(),
+        reason: trimmedReason,
         status: "PENDING",
+      },
+      select: {
+        id: true,
+        reason: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        reviewedAt: true,
       },
     });
 
     return NextResponse.json({ appeal }, { status: 201 });
   } catch (error) {
-    const message = error?.message || "Unauthorized";
-    const status = message.includes("Authorization") || message.includes("token") ? 401 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const message = error?.message || "Failed to submit appeal";
+    return NextResponse.json({ error: message }, { status: getErrorStatus(message) });
   }
 }

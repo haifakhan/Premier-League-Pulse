@@ -8,6 +8,36 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+const REPORT_REASONS = [
+  "Spam",
+  "Harassment",
+  "Hate speech",
+  "Offensive content",
+  "Misinformation",
+  "Other",
+];
+
+function normalizeReason(value) {
+  if (!isNonEmptyString(value)) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return REPORT_REASONS.find((reason) => reason.toLowerCase() === normalized) ?? null;
+}
+
+function formatStoredReason(reason, details) {
+  if (!isNonEmptyString(details)) {
+    return reason;
+  }
+
+  return `${reason} | ${details.trim()}`;
+}
+
+function isUniqueConstraintError(error) {
+  return Boolean(error && typeof error === "object" && error.code === "P2002");
+}
+
 export async function POST(request) {
   let body;
 
@@ -19,7 +49,7 @@ export async function POST(request) {
 
   try {
     const payload = requireAuth(request);
-    const { targetType, targetId, reason } = body || {};
+    const { targetType, targetId, reason, details } = body || {};
 
     if (
       !isNonEmptyString(targetType) ||
@@ -39,33 +69,79 @@ export async function POST(request) {
       );
     }
 
+    const canonicalReason = normalizeReason(reason);
+    if (!canonicalReason) {
+      return NextResponse.json(
+        { error: "Invalid reason" },
+        { status: 400 }
+      );
+    }
+
+    const trimmedDetails = isNonEmptyString(details) ? details.trim() : "";
+    if (canonicalReason === "Other" && !trimmedDetails) {
+      return NextResponse.json(
+        { error: "details are required when reason is Other" },
+        { status: 400 }
+      );
+    }
+
+    const storedReason = formatStoredReason(canonicalReason, trimmedDetails);
     const trimmedTargetId = targetId.trim();
 
     if (targetType === "POST") {
       const post = await prisma.post.findUnique({
         where: { id: trimmedTargetId },
+        select: {
+          id: true,
+          authorId: true,
+          content: true,
+          isDeleted: true,
+          isHidden: true,
+          thread: {
+            select: {
+              isDeleted: true,
+              isHidden: true,
+            },
+          },
+        },
+      });
+
+      if (!post || post.isDeleted || post.isHidden || post.thread?.isDeleted || post.thread?.isHidden) {
+        return NextResponse.json({ error: "Target not found" }, { status: 404 });
+      }
+
+      if (post.authorId === payload.id) {
+        return NextResponse.json(
+          { error: "You cannot report your own content" },
+          { status: 403 }
+        );
+      }
+
+      const existingReport = await prisma.report.findFirst({
+        where: {
+          reporterUserId: payload.id,
+          postId: trimmedTargetId,
+        },
         select: { id: true },
       });
 
-      if (!post) {
-        return NextResponse.json({ error: "Target not found" }, { status: 404 });
+      if (existingReport) {
+        return NextResponse.json(
+          { error: "You have already reported this post" },
+          { status: 409 }
+        );
       }
 
       const report = await prisma.report.create({
         data: {
           reporterUserId: payload.id,
-          reason: reason.trim(),
+          reason: storedReason,
           postId: trimmedTargetId,
           threadId: null,
         },
       });
 
-      const reportedPost = await prisma.post.findUnique({
-        where: { id: trimmedTargetId },
-        select: { content: true },
-      });
-
-      const { aiScore, aiLabel } = await analyzeContent(reportedPost?.content || "");
+      const { aiScore, aiLabel } = await analyzeContent(post.content || "");
 
       const updatedReport = await prisma.report.update({
         where: { id: report.id },
@@ -77,28 +153,51 @@ export async function POST(request) {
 
     const thread = await prisma.thread.findUnique({
       where: { id: trimmedTargetId },
+      select: {
+        id: true,
+        authorId: true,
+        title: true,
+        isDeleted: true,
+        isHidden: true,
+      },
+    });
+
+    if (!thread || thread.isDeleted || thread.isHidden) {
+      return NextResponse.json({ error: "Target not found" }, { status: 404 });
+    }
+
+    if (thread.authorId === payload.id) {
+      return NextResponse.json(
+        { error: "You cannot report your own content" },
+        { status: 403 }
+      );
+    }
+
+    const existingReport = await prisma.report.findFirst({
+      where: {
+        reporterUserId: payload.id,
+        threadId: trimmedTargetId,
+      },
       select: { id: true },
     });
 
-    if (!thread) {
-      return NextResponse.json({ error: "Target not found" }, { status: 404 });
+    if (existingReport) {
+      return NextResponse.json(
+        { error: "You have already reported this thread" },
+        { status: 409 }
+      );
     }
 
     const report = await prisma.report.create({
       data: {
         reporterUserId: payload.id,
-        reason: reason.trim(),
+        reason: storedReason,
         postId: null,
         threadId: trimmedTargetId,
       },
     });
 
-    const reportedThread = await prisma.thread.findUnique({
-      where: { id: trimmedTargetId },
-      select: { title: true },
-    });
-
-    const { aiScore, aiLabel } = await analyzeContent(reportedThread?.title || "");
+    const { aiScore, aiLabel } = await analyzeContent(thread.title || "");
 
     const updatedReport = await prisma.report.update({
       where: { id: report.id },
@@ -107,6 +206,13 @@ export async function POST(request) {
 
     return NextResponse.json({ report: updatedReport }, { status: 201 });
   } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return NextResponse.json(
+        { error: "You have already reported this content" },
+        { status: 409 }
+      );
+    }
+
     const message = error?.message || "Unauthorized";
     const status = message.includes("Authorization") || message.includes("token") ? 401 : 500;
     return NextResponse.json({ error: message }, { status });

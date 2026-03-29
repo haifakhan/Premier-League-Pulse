@@ -24,7 +24,7 @@ export async function POST(request, context) {
 
     const report = await prisma.report.findUnique({
       where: { id: params.id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, postId: true, threadId: true },
     });
 
     if (!report) {
@@ -38,8 +38,20 @@ export async function POST(request, context) {
       );
     }
 
-    await prisma.report.update({
-      where: { id: report.id },
+    const targetType = report.postId ? "POST" : report.threadId ? "THREAD" : null;
+    const targetId = report.postId ?? report.threadId;
+
+    if (!targetType || !targetId) {
+      return NextResponse.json({ error: "Report target not found" }, { status: 404 });
+    }
+
+    const where =
+      targetType === "POST"
+        ? { postId: targetId, status: "PENDING" }
+        : { threadId: targetId, status: "PENDING" };
+
+    const result = await prisma.report.updateMany({
+      where,
       data: {
         status: "DISMISSED",
         reviewedAt: new Date(),
@@ -47,7 +59,7 @@ export async function POST(request, context) {
       },
     });
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    return NextResponse.json({ success: true, updatedReportsCount: result.count }, { status: 200 });
   } catch (error) {
     const message = error?.message || "Failed to dismiss report";
     return NextResponse.json({ error: message }, { status: getErrorStatus(message) });

@@ -253,6 +253,8 @@ model Report {
   @@index([reporterUserId])
   @@index([postId])
   @@index([threadId])
+  @@unique([reporterUserId, postId])
+  @@unique([reporterUserId, threadId])
 }
 
 model Appeal {
