@@ -71,10 +71,14 @@ export default function LoginPage() {
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
 
     async function completeOAuthLogin() {
+      const authToken = oauthToken;
+      if (!authToken) {
+        handledOAuthRef.current = false;
+        return;
+      }
+
       setError("");
       setIsSubmitting(true);
-
-      const authToken = oauthToken;
 
       try {
         await login(authToken);
