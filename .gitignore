@@ -44,7 +44,5 @@ next-env.d.ts
 
 *.db
 
-.env.docker
-.env.local
 
 /public/uploads/
