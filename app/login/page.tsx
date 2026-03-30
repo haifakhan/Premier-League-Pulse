@@ -1,18 +1,93 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
-import { AuthApiError, login as loginRequest } from "@/lib/api/auth";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { AuthApiError, getCurrentUser, login as loginRequest } from "@/lib/api/auth";
 import { useAuth } from "@/lib/context/auth";
+
+function getOAuthErrorMessage(errorCode: string) {
+  switch (errorCode) {
+    case "invalid_state":
+      return "Google sign-in expired. Please try again.";
+    case "missing_code":
+      return "Google sign-in did not return a valid code.";
+    case "token_exchange":
+    case "profile_fetch":
+    case "oauth_failed":
+      return "Google sign-in failed. Please try again.";
+    case "unverified_email":
+      return "Google account email must be verified.";
+    case "oauth_config":
+      return "Google sign-in is not configured yet.";
+    default:
+      return "Google sign-in failed. Please try again.";
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const handledOAuthRef = useRef(false);
+
+  useEffect(() => {
+    const oauthError = searchParams.get("oauthError");
+    if (!oauthError) {
+      return;
+    }
+    setError(getOAuthErrorMessage(oauthError));
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.delete("oauthError");
+    window.history.replaceState(
+      null,
+      "",
+      `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+    );
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (handledOAuthRef.current) {
+      return;
+    }
+
+    const hash = window.location.hash;
+    if (!hash.startsWith("#")) {
+      return;
+    }
+
+    const hashParams = new URLSearchParams(hash.slice(1));
+    const oauthToken = hashParams.get("oauthToken");
+
+    if (!oauthToken) {
+      return;
+    }
+
+    handledOAuthRef.current = true;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+
+    async function completeOAuthLogin() {
+      setError("");
+      setIsSubmitting(true);
+
+      try {
+        await login(oauthToken);
+        const currentUser = await getCurrentUser(oauthToken);
+        router.push(currentUser.isBanned ? "/appeals" : "/");
+      } catch {
+        setError("Unable to log in right now");
+        handledOAuthRef.current = false;
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+
+    void completeOAuthLogin();
+  }, [login, router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,6 +121,13 @@ export default function LoginPage() {
             Use your email and password to access the dashboard.
           </p>
         </div>
+
+        <Link
+          href="/api/auth/google/start"
+          className="mb-5 inline-flex w-full items-center justify-center rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+        >
+          Continue with Google
+        </Link>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
