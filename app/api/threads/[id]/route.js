@@ -81,7 +81,18 @@ export async function PATCH(request, context) {
 
   try {
     const payload = requireAuth(request);
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { isBanned: true },
+    });
     const { title, content } = body || {};
+
+    if (user?.isBanned) {
+      return NextResponse.json(
+        { error: "Banned users cannot edit threads" },
+        { status: 403 }
+      );
+    }
 
     const hasTitle = isNonEmptyString(title);
     const hasContent = isNonEmptyString(content);
@@ -208,6 +219,17 @@ export async function DELETE(request, context) {
 
   try {
     const payload = requireAuth(request);
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { isBanned: true },
+    });
+
+    if (user?.isBanned) {
+      return NextResponse.json(
+        { error: "Banned users cannot delete threads" },
+        { status: 403 }
+      );
+    }
 
     const thread = await prisma.thread.findUnique({
       where: { id: params.id },

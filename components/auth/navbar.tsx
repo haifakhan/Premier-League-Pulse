@@ -7,18 +7,8 @@ import { useAuth } from "@/lib/context/auth";
 
 export default function AuthNavbar() {
   const { user, isLoading, logout } = useAuth();
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
-    if (typeof document === "undefined" || typeof window === "undefined") {
-      return "light";
-    }
-
-    const storedTheme = window.localStorage.getItem("theme");
-    if (storedTheme === "dark" || storedTheme === "light") {
-      return storedTheme;
-    }
-
-    return document.documentElement.classList.contains("dark") ? "dark" : "light";
-  });
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [isThemeReady, setIsThemeReady] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -39,8 +29,18 @@ export default function AuthNavbar() {
       : [];
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-  }, [theme]);
+    const storedTheme = window.localStorage.getItem("theme");
+    const nextTheme =
+      storedTheme === "dark" || storedTheme === "light"
+        ? storedTheme
+        : document.documentElement.classList.contains("dark")
+          ? "dark"
+          : "light";
+
+    document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    setTheme(nextTheme);
+    setIsThemeReady(true);
+  }, []);
 
   useEffect(() => {
     if (!isMenuOpen) {
@@ -107,10 +107,16 @@ export default function AuthNavbar() {
           <button
             type="button"
             onClick={toggleTheme}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={
+              isThemeReady
+                ? theme === "dark"
+                  ? "Switch to light mode"
+                  : "Switch to dark mode"
+                : "Toggle theme"
+            }
             className="cursor-pointer rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-100 sm:px-3"
           >
-            {theme === "dark" ? "Light" : "Dark"}
+            {isThemeReady ? (theme === "dark" ? "Light" : "Dark") : "Theme"}
           </button>
 
           {isLoading ? (
