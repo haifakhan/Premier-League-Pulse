@@ -74,9 +74,11 @@ export default function LoginPage() {
       setError("");
       setIsSubmitting(true);
 
+      const authToken = oauthToken;
+
       try {
-        await login(oauthToken);
-        const currentUser = await getCurrentUser(oauthToken);
+        await login(authToken);
+        const currentUser = await getCurrentUser(authToken);
         router.push(currentUser.isBanned ? "/appeals" : "/");
       } catch {
         setError("Unable to log in right now");
