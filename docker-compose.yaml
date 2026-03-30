@@ -36,6 +36,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: builder
+    profiles:
+      - import
     env_file:
       - .env.docker
     depends_on:

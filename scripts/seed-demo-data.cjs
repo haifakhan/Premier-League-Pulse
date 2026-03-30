@@ -557,6 +557,7 @@ async function seedPolls(usersByKey, threadsByKey) {
       poll = await prisma.poll.create({
         data: {
           threadId: target.thread.id,
+          createdByUserId: target.thread.authorId,
           question: pollDef.question,
           deadline: futureDate(pollDef.deadlineInDays),
         },
