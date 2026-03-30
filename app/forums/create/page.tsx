@@ -49,7 +49,7 @@ export default function CreateThreadPage() {
   }, [isLoading, router, token, user]);
 
   useEffect(() => {
-    if (isLoading || !user || !token) {
+    if (isLoading || !user || !token || user.isBanned) {
       return;
     }
 
@@ -213,6 +213,17 @@ export default function CreateThreadPage() {
 
   if (!user || !token) {
     return null;
+  }
+
+  if (user.isBanned) {
+    return (
+      <section className="mx-auto max-w-3xl rounded-3xl border border-amber-300 bg-amber-50 p-6 shadow-sm">
+        <h1 className="text-3xl font-semibold text-slate-900">Create Thread</h1>
+        <p className="mt-3 text-sm text-amber-800">
+          Banned users cannot create threads. If you believe this is a mistake, submit an appeal from your account menu.
+        </p>
+      </section>
+    );
   }
 
   if (isPageLoading) {

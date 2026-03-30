@@ -309,6 +309,7 @@ function normalizeCreatedPoll(
 function PollCard({
   poll,
   isLoggedIn,
+  isBannedUser,
   hasVoted,
   isSubmittingVote,
   voteError,
@@ -316,13 +317,14 @@ function PollCard({
 }: {
   poll: ThreadPoll;
   isLoggedIn: boolean;
+  isBannedUser: boolean;
   hasVoted: boolean;
   isSubmittingVote: boolean;
   voteError: string | null;
   onVote: (optionId: string) => Promise<void>;
 }) {
   const closed = isPollClosed(poll.deadline);
-  const showVoteButtons = isLoggedIn && !closed && !hasVoted;
+  const showVoteButtons = isLoggedIn && !isBannedUser && !closed && !hasVoted;
 
   return (
     <section className="rounded-2xl border border-slate-300/80 bg-white/90 p-5 shadow-sm backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/80 dark:shadow-black/25 sm:p-6">
@@ -377,6 +379,7 @@ function PollCard({
 
       <div className="mt-4 text-sm text-slate-600 dark:text-slate-300">
         <p>Total votes: {poll.totalVotes}</p>
+        {isBannedUser ? <p>Banned users cannot vote in polls.</p> : null}
         {!isLoggedIn && !closed ? <p>Log in to vote.</p> : null}
         {hasVoted ? <p>You have already voted in this poll.</p> : null}
         {closed ? <p>Voting for this poll has closed.</p> : null}
@@ -1084,17 +1087,19 @@ export default function ThreadPage() {
   const replies = sortPosts(thread.replies);
   const teamMeta = thread.teamId ? teamsById[thread.teamId] ?? null : null;
   const repliesCount = replies.length;
-  const canReply = Boolean(user && token && !isClosed);
+  const isBannedUser = Boolean(user?.isBanned);
+  const canReply = Boolean(user && token && !isClosed && !isBannedUser);
   const hasVotedInPoll = poll ? Boolean(hasVotedPollIds[poll.id]) : false;
-  const canCreatePoll = Boolean(user && token && thread.author.id === user.id && !poll && !isClosed);
-  const canManageThread = Boolean(user && token && user.id === thread.author.id);
-  const canManagePoll = Boolean(user && token && poll && user.id === poll.createdByUserId);
+  const canCreatePoll = Boolean(user && token && !isBannedUser && thread.author.id === user.id && !poll && !isClosed);
+  const canManageThread = Boolean(user && token && !isBannedUser && user.id === thread.author.id);
+  const canManagePoll = Boolean(user && token && !isBannedUser && poll && user.id === poll.createdByUserId);
   const canReportThread = Boolean(user && token && user.id !== thread.author.id);
   const isMatchThread = Boolean(thread.matchId);
   const hasGeneratedSentiment = Boolean(matchSentiment?.generatedAt && matchSentiment.commentCount > 0);
   const overallSentiment = toSentimentLabel(matchSentiment?.overall);
   const currentThread = thread;
   const rootPost = currentThread.rootPost;
+  const canShowBannedPollNotice = Boolean(user && token && isBannedUser && thread.author.id === user.id && !poll && !isClosed);
 
   async function reloadPoll() {
     if (!threadId) {
@@ -1880,6 +1885,12 @@ export default function ThreadPage() {
         ) : null}
       </header>
 
+      {isBannedUser ? (
+        <section className="rounded-xl border border-amber-300/80 bg-amber-100/80 px-4 py-3 text-sm text-amber-800 dark:border-amber-600/70 dark:bg-amber-900/20 dark:text-amber-200">
+          Your account is banned. You cannot create threads, reply, edit or delete your content, create polls, follow new users, or vote in polls until you are unbanned.
+        </section>
+      ) : null}
+
       {isMatchThread ? (
         isSentimentLoading && !matchSentiment ? (
           <section className="rounded-xl border border-slate-300/80 bg-slate-100/60 px-4 py-3 dark:border-slate-700/70 dark:bg-slate-800/60">
@@ -1943,6 +1954,7 @@ export default function ThreadPage() {
           <PollCard
             poll={poll}
             isLoggedIn={Boolean(user && token)}
+            isBannedUser={isBannedUser}
             hasVoted={hasVotedInPoll}
             isSubmittingVote={isSubmittingVote}
             voteError={voteError}
@@ -2114,6 +2126,10 @@ export default function ThreadPage() {
             </section>
           ) : null}
         </div>
+      ) : canShowBannedPollNotice ? (
+        <section className="rounded-2xl border border-dashed border-amber-300/80 bg-amber-100/70 p-5 text-sm text-amber-800 dark:border-amber-600/70 dark:bg-amber-900/20 dark:text-amber-200 sm:p-6">
+          Banned users cannot create polls.
+        </section>
       ) : canCreatePoll ? (
         <section className="rounded-2xl border border-dashed border-slate-300/80 bg-white/90 p-5 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/75 dark:shadow-black/20 sm:p-6">
           {!showCreatePollForm ? (
@@ -2269,7 +2285,7 @@ export default function ThreadPage() {
           <PostCard
             post={thread.rootPost}
             variant="root"
-            canManage={user?.id === thread.rootPost.author?.id}
+            canManage={Boolean(!isBannedUser && user?.id === thread.rootPost.author?.id)}
             isClosed={isClosed}
             revisionState={
               revisionStates[thread.rootPost.id] ?? {
@@ -2327,7 +2343,7 @@ export default function ThreadPage() {
               key={post.id}
               post={post}
               variant="reply"
-              canManage={user?.id === post.author?.id}
+              canManage={Boolean(!isBannedUser && user?.id === post.author?.id)}
               isClosed={isClosed}
               revisionState={
                 revisionStates[post.id] ?? {
@@ -2402,6 +2418,8 @@ export default function ThreadPage() {
         <section className="rounded-2xl border border-slate-300/80 bg-slate-100/70 p-6 text-sm text-slate-600 dark:border-slate-700/70 dark:bg-slate-800/70 dark:text-slate-300">
           {isClosed
             ? "This thread is closed, so replies are disabled."
+            : isBannedUser
+              ? "Banned users cannot participate in discussions."
             : isAuthLoading
               ? "Checking your session..."
               : "Log in to reply to this thread."}

@@ -564,12 +564,27 @@ export default function ForumsBrowser({ initialTeamId }: ForumsBrowserProps) {
           </div>
 
           {!isAuthLoading && user ? (
-            <Link
-              href="/forums/create"
-              className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500"
-            >
-              New Thread
-            </Link>
+            user.isBanned ? (
+              <div className="flex flex-col items-start gap-2 sm:items-end">
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex cursor-not-allowed items-center justify-center rounded-full bg-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600"
+                >
+                  New Thread
+                </button>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Banned users cannot create threads.
+                </p>
+              </div>
+            ) : (
+              <Link
+                href="/forums/create"
+                className="inline-flex items-center justify-center rounded-full bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500"
+              >
+                New Thread
+              </Link>
+            )
           ) : null}
         </div>
       </header>
