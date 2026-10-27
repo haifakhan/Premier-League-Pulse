@@ -1,90 +1,57 @@
-# SportsDeck (PP2)
+# Premier League Pulse
 
-SportsDeck is a Premium League Football focused web app that combines live match data with community discussion. Users can follow teams, create and reply to threads, vote in polls, report content, and use moderation/appeals workflows.
+A Premier League community app for following matches, checking standings, and discussing football with other fans.
 
+## Features
 
-## Quick Start (Docker, Recommended)
+- Match schedules, results, standings, and team pages
+- Match threads, posts, replies, and polls
+- Personalized feeds and team follows
+- Google sign-in and account authentication
+- Content reporting, moderation, and appeals
+- AI-assisted translation and sentiment analysis
 
-1. Configure `.env.docker` with your values (see Environment Variables below).
-2. Build and start services:
+## Built with
 
-```bash
-./start.sh
-```
+Next.js, React, TypeScript, Tailwind CSS, PostgreSQL, and Prisma. Docker Compose runs the app with PostgreSQL and Nginx.
 
-3. Import/migrate/seed database data:
+## Run locally
 
-```bash
-./import-data.sh
-```
-
-4. Open the app:
-
-- `http://localhost:8012`
-- PostgreSQL host port: `localhost:5432`
-
-5. Stop everything:
-
-```bash
-./stop.sh
-```
-
-
-
-## Run Locally Without Docker
-
-1. Install dependencies:
+Requires Node.js and a running PostgreSQL database.
 
 ```bash
 npm install
+cp .env.example .env.local
 ```
 
-2. Configure `.env.local`.
-3. Apply migrations + seed baseline/demo data:
+Fill in `.env.local` with your database URL, a JWT secret, and the API credentials for the services you use. Set a unique admin password before seeding.
 
 ```bash
 npm run db:setup
-```
-
-4. Start dev server:
-
-```bash
 npm run dev
 ```
 
-5. Open:
+Open [localhost:3000](http://localhost:3000).
 
-- `http://localhost:3000`
+## Run with Docker
 
-Note: `npm run dev` already runs `prisma generate` before starting Next.js.
+```bash
+cp .env.docker.example .env.docker
+```
 
-## Environment Variables
+Fill in `.env.docker`, then run:
 
+```bash
+./start.sh
+bash ./import-data.sh
+```
 
-### `.env.local` (local `npm run dev`) and .env file
+Open [localhost:8012](http://localhost:8012). Run `./stop.sh` to stop the containers.
 
-this is pushed!
+## Other commands
 
-### `.env.docker` (Docker Compose)
-
-this is also pushed! 
-
-## Deployment link
-https://sportsdeck-l1mz.vercel.app/
-
-
-
-## Script Reference
-
-- `npm run dev` -> generate Prisma client + run Next.js dev server
-- `npm run build` -> generate Prisma client + production build
-- `npm run start` -> run production server
-- `npm run lint` -> run ESLint
-- `npm run db:migrate:deploy` -> apply Prisma migrations
-- `npm run db:seed-admin` -> create/update admin account
-- `npm run db:seed-demo` -> seed demo users/threads/posts/polls/reports
-- `npm run db:sync-match-threads` -> sync match-based threads
-- `npm run db:setup` -> migrate + admin seed + demo seed + match-thread sync
-- `./start.sh` -> `docker compose ... up -d --build`
-- `./import-data.sh` -> start db + run importer (migrate/seed/sync)
-- `./stop.sh` -> `docker compose down`
+```bash
+npm run lint    # Check code style
+npm run build   # Build for production
+npm run start   # Serve the production build
+```
